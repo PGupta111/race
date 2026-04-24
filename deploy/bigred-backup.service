@@ -1,0 +1,10 @@
+[Unit]
+Description=Big Red — daily SQLite backup
+
+[Service]
+Type=oneshot
+User=user
+WorkingDirectory=/home/user/race
+ExecStart=/home/user/race/.venv/bin/python backup.py
+StandardOutput=journal
+StandardError=journal

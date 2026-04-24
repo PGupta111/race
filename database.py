@@ -1,5 +1,4 @@
 import sqlite3
-import time
 from pathlib import Path
 
 DB_PATH = "race.db"
@@ -16,14 +15,14 @@ def init_db():
     conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS runners (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            bib_number  TEXT UNIQUE NOT NULL,
-            name        TEXT NOT NULL,
-            category    TEXT NOT NULL,
-            email       TEXT DEFAULT '',
-            checkin_time TEXT DEFAULT '',
-            tshirt      INTEGER DEFAULT 0,
-            tshirt_price REAL DEFAULT 5.0,
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            bib_number    TEXT UNIQUE NOT NULL,
+            name          TEXT NOT NULL,
+            category      TEXT NOT NULL,
+            email         TEXT DEFAULT '',
+            checkin_time  TEXT DEFAULT '',
+            tshirt        INTEGER DEFAULT 0,
+            tshirt_price  REAL DEFAULT 5.0,
             checkin_photo TEXT DEFAULT ''
         );
 
@@ -56,31 +55,44 @@ def init_db():
 
 
 def seed_runners():
+    """Seed sample runners only when the table is completely empty."""
     conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM runners").fetchone()[0]
+    if count > 0:
+        conn.close()
+        return
+
     sample = [
-        ("101", "Alice Chen",      "Students"),
-        ("102", "Bob Martinez",    "Students"),
-        ("103", "Carol Smith",     "Alumni"),
-        ("104", "David Lee",       "Alumni"),
-        ("105", "Eve Johnson",     "Parents"),
-        ("106", "Frank Williams",  "Parents"),
-        ("107", "Grace Brown",     "Students"),
-        ("108", "Henry Davis",     "Alumni"),
-        ("109", "Iris Thompson",   "Parents"),
-        ("110", "James Wilson",    "Students"),
+        ("101", "Alice Chen",     "Students"),
+        ("102", "Bob Martinez",   "Students"),
+        ("103", "Carol Smith",    "Alumni"),
+        ("104", "David Lee",      "Alumni"),
+        ("105", "Eve Johnson",    "Parents"),
+        ("106", "Frank Williams", "Parents"),
+        ("107", "Grace Brown",    "Students"),
+        ("108", "Henry Davis",    "Alumni"),
+        ("109", "Iris Thompson",  "Parents"),
+        ("110", "James Wilson",   "Students"),
     ]
     for bib, name, cat in sample:
         conn.execute(
-            "INSERT OR IGNORE INTO runners (bib_number, name, category) VALUES (?, ?, ?)",
+            "INSERT INTO runners (bib_number, name, category) VALUES (?, ?, ?)",
             (bib, name, cat),
         )
     conn.commit()
     conn.close()
 
 
+def get_finish_event(event_id: int) -> dict | None:
+    conn  = get_db()
+    row   = conn.execute("SELECT * FROM finish_events WHERE id=?", (event_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_race_start() -> float | None:
     conn = get_db()
-    row = conn.execute("SELECT value FROM race_meta WHERE key = 'race_start'").fetchone()
+    row  = conn.execute("SELECT value FROM race_meta WHERE key='race_start'").fetchone()
     conn.close()
     return float(row["value"]) if row else None
 

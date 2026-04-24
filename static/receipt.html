@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Finish Receipt · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    @media print {
+      .header, .no-print { display: none !important; }
+      body { background: #fff; color: #000; }
+      .receipt-card { border: 2px solid #000; }
+      .bib-big  { color: #B31B1B; }
+      .time-big { color: #006400; }
+    }
+    .receipt-card {
+      max-width: 480px;
+      margin: 32px auto;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .receipt-top {
+      background: linear-gradient(135deg, #8B0000, #B31B1B);
+      padding: 20px 28px;
+      color: white;
+    }
+    .receipt-top h1 { font-size: 1rem; font-weight: 700; letter-spacing: 2px; opacity: .8; }
+    .bib-big  { font-size: 5rem; font-weight: 900; color: var(--red); font-variant-numeric: tabular-nums; letter-spacing: 6px; }
+    .time-big { font-size: 2.2rem; font-weight: 700; color: var(--green); font-family: 'Courier New', monospace; font-variant-numeric: tabular-nums; }
+    .receipt-body { padding: 24px 28px; }
+    .receipt-row  { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
+    .receipt-row:last-child { border-bottom: none; }
+    .receipt-label { color: var(--muted); }
+    .receipt-value { font-weight: 600; }
+    .rank-display  { font-size: 2rem; font-weight: 900; }
+    .clip-link { display: block; margin-top: 16px; padding: 10px; background: var(--surface2); border-radius: 8px; text-align: center; color: var(--blue); text-decoration: none; font-size: .9rem; }
+    .clip-link:hover { background: #2a2a2a; }
+    .loading { text-align: center; padding: 60px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="live-dot"></div>
+  <div>
+    <div class="header-brand">🏁 BIG RED COMMAND CENTER</div>
+    <div class="header-sub">Finish Receipt</div>
+  </div>
+  <nav class="nav">
+    <a href="/">Dashboard</a>
+    <a href="/results">Results</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div id="loading" class="loading">Loading receipt…</div>
+  <div id="receipt-card" class="receipt-card" style="display:none">
+
+    <div class="receipt-top">
+      <h1>🏁 BIG RED FINISH RECEIPT</h1>
+      <div style="font-size:.8rem;opacity:.7" id="r-validated">Validated</div>
+    </div>
+
+    <div class="receipt-body">
+      <div style="text-align:center;margin-bottom:12px">
+        <div class="bib-big" id="r-bib">—</div>
+        <div class="time-big" id="r-time">—</div>
+        <div style="color:var(--muted);font-size:.8rem;margin-top:4px" id="r-rank">—</div>
+      </div>
+
+      <div class="receipt-row">
+        <span class="receipt-label">Name</span>
+        <span class="receipt-value" id="r-name">—</span>
+      </div>
+      <div class="receipt-row">
+        <span class="receipt-label">Category</span>
+        <span class="receipt-value" id="r-cat">—</span>
+      </div>
+      <div class="receipt-row">
+        <span class="receipt-label">Bib Number</span>
+        <span class="receipt-value mono" id="r-bib2">—</span>
+      </div>
+      <div class="receipt-row">
+        <span class="receipt-label">Finish Time</span>
+        <span class="receipt-value mono" id="r-time2">—</span>
+      </div>
+      <div class="receipt-row">
+        <span class="receipt-label">VAR Status</span>
+        <span class="receipt-value" id="r-status">—</span>
+      </div>
+      <div class="receipt-row" id="tshirt-row" style="display:none">
+        <span class="receipt-label">T-Shirt Order</span>
+        <span class="receipt-value" style="color:var(--green)">✓ $5 — collect at exit</span>
+      </div>
+      <div class="receipt-row">
+        <span class="receipt-label">IR Depth</span>
+        <span class="receipt-value" id="r-depth">—</span>
+      </div>
+
+      <div id="clip-area"></div>
+
+      <div class="no-print" style="display:flex;gap:8px;margin-top:20px">
+        <button class="btn btn-red" style="flex:1;justify-content:center" onclick="window.print()">
+          🖨 Print Receipt
+        </button>
+        <a class="btn btn-gray" href="/results" style="flex:1;justify-content:center;text-decoration:none">
+          View Results
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+async function loadReceipt() {
+  // Extract event_id from URL: /receipt/42
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const eventId = parseInt(parts[parts.length - 1]);
+  if (isNaN(eventId)) {
+    document.getElementById('loading').textContent = 'Invalid receipt URL.';
+    return;
+  }
+
+  try {
+    const data = await api('GET', `/finish_events/${eventId}`);
+    renderReceipt(data);
+  } catch (err) {
+    document.getElementById('loading').textContent = `Error: ${err.message}`;
+  }
+}
+
+function renderReceipt(d) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('receipt-card').style.display = 'block';
+
+  const runner = d.runner || {};
+
+  document.getElementById('r-bib').textContent      = d.bib_number;
+  document.getElementById('r-bib2').textContent     = d.bib_number;
+  document.getElementById('r-time').textContent     = d.finish_time || '—';
+  document.getElementById('r-time2').textContent    = d.finish_time || '—';
+  document.getElementById('r-name').textContent     = runner.name || '—';
+  document.getElementById('r-cat').innerHTML        = catBadge(runner.category);
+  document.getElementById('r-status').innerHTML     = statusBadge(d.status);
+  document.getElementById('r-depth').textContent    = fmtDepth(d.depth_mm) + (d.depth_ok ? ' ✓' : ' ⚠');
+  document.getElementById('r-validated').textContent =
+    d.validated_at ? 'Validated ' + new Date(d.validated_at).toLocaleTimeString() : 'Pending validation';
+
+  if (d.rank) {
+    const medals = ['🥇','🥈','🥉'];
+    document.getElementById('r-rank').textContent =
+      `${medals[d.rank - 1] || '#' + d.rank} Overall rank ${d.rank}`;
+  }
+
+  if (runner.tshirt) {
+    document.getElementById('tshirt-row').style.display = 'flex';
+  }
+
+  if (d.video_path) {
+    document.getElementById('clip-area').innerHTML = `
+      <a class="clip-link" href="${d.video_path}" target="_blank">
+        ▶ Watch 5-second finish clip
+      </a>`;
+  }
+  if (d.photo_path) {
+    document.getElementById('clip-area').insertAdjacentHTML('beforeend', `
+      <img src="${d.photo_path}" alt="Finish photo"
+           style="width:100%;border-radius:8px;margin-top:12px;object-fit:cover;max-height:200px">`);
+  }
+}
+
+loadReceipt();
+</script>
+</body>
+</html>

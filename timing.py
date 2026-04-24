@@ -4,12 +4,11 @@ Precision timing primitives.
 LineScanTimer simulates a 1-pixel vertical line-scan camera that delivers
 millisecond-accurate finish timestamps.
 
-DepthChecker simulates the IR/LiDAR sensor that gates bib processing:
-a bib is only accepted when the runner is within 1 m of the finish line.
+DepthChecker gates bib processing: only accepted when depth ≤ threshold.
 """
 import time
 
-FINISH_DEPTH_THRESHOLD_MM = 1000  # 1 metre
+FINISH_DEPTH_THRESHOLD_MM = 1000.0  # 1 metre
 
 
 class LineScanTimer:
@@ -26,14 +25,17 @@ class LineScanTimer:
         self._race_start = ts if ts is not None else time.time()
         return self._race_start
 
+    def reset(self) -> None:
+        self._race_start = None
+
     def record_crossing(self) -> dict:
-        wall = time.time()
+        wall    = time.time()
         elapsed = wall - self._race_start if self._race_start else 0.0
         return {
-            "wall_timestamp": wall,
-            "elapsed_s": round(elapsed, 4),
-            "elapsed_ms": round(elapsed * 1000, 1),
-            "formatted": _fmt(elapsed),
+            "wall_timestamp":  wall,
+            "elapsed_s":       round(elapsed, 4),
+            "elapsed_ms":      round(elapsed * 1000, 1),
+            "formatted":       _fmt(elapsed),
         }
 
 
@@ -45,9 +47,6 @@ class DepthChecker:
 
     def check(self, depth_mm: float) -> bool:
         return 0 < depth_mm <= self.threshold_mm
-
-    def reading_label(self, depth_mm: float) -> str:
-        return "OK" if self.check(depth_mm) else "TOO FAR"
 
 
 def _fmt(seconds: float) -> str:

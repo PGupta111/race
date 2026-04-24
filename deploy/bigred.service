@@ -1,0 +1,28 @@
+[Unit]
+Description=Big Red Command Center
+Documentation=https://github.com/PGupta111/race
+After=network.target
+
+[Service]
+Type=notify
+User=user
+WorkingDirectory=/home/user/race
+EnvironmentFile=/home/user/race/.env
+ExecStart=/home/user/race/.venv/bin/gunicorn \
+    -k uvicorn.workers.UvicornWorker \
+    -w 1 \
+    --bind 127.0.0.1:8000 \
+    --timeout 120 \
+    --access-logfile - \
+    main:app
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
