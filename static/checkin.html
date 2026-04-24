@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Check-In · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="live-dot"></div>
+  <div>
+    <div class="header-brand">🏁 BIG RED COMMAND CENTER</div>
+    <div class="header-sub">Volunteer Check-In Station</div>
+  </div>
+  <nav class="nav">
+    <a href="/">Dashboard</a>
+    <a href="/checkin" class="active">Check-In</a>
+    <a href="/var">VAR</a>
+    <a href="/results">Results</a>
+  </nav>
+</header>
+
+<div class="container">
+
+  <div class="grid-2" style="align-items:start">
+
+    <!-- Left: check-in form -->
+    <div>
+      <div class="card">
+        <div class="card-title">Bib Detection &amp; Check-In</div>
+
+        <!-- Photo detect -->
+        <div class="form-group">
+          <label>📷 Snap Bib Photo (YOLO26 auto-detect)</label>
+          <input type="file" id="photo-input" accept="image/*" capture="environment"
+            style="width:100%;background:var(--surface2);border:2px dashed #444;border-radius:8px;padding:14px;color:var(--muted);cursor:pointer">
+        </div>
+
+        <div id="detect-result" class="card" style="display:none;padding:14px;margin-bottom:16px">
+          <div class="card-title">YOLO26 Detection Result</div>
+          <div class="flex gap-8 items-center">
+            <div class="receipt-bib" id="detected-bib-display">—</div>
+            <div>
+              <div style="font-size:.8rem;color:var(--muted)">Confidence</div>
+              <div class="bold" id="det-conf">—</div>
+              <div style="font-size:.8rem;color:var(--muted);margin-top:4px">Inference</div>
+              <div class="bold" id="det-ms">—</div>
+            </div>
+          </div>
+          <button class="btn btn-gray mt-8" id="btn-use-detected">Use Detected Bib →</button>
+        </div>
+
+        <div style="text-align:center;color:var(--muted);margin:8px 0;font-size:.8rem">— or enter manually —</div>
+
+        <div class="form-group">
+          <label>Bib Number</label>
+          <input id="bib-input" type="text" placeholder="e.g. 102" autocomplete="off"
+            style="font-size:1.5rem;letter-spacing:3px;text-align:center">
+        </div>
+
+        <div id="runner-preview" class="card" style="display:none;padding:14px;margin-bottom:16px">
+          <div class="card-title">Runner Found</div>
+          <div class="flex items-center gap-12">
+            <div class="receipt-bib" id="prev-bib">—</div>
+            <div>
+              <div class="bold" id="prev-name" style="font-size:1.1rem">—</div>
+              <div id="prev-cat">—</div>
+              <div id="prev-status" style="font-size:.8rem;margin-top:4px;color:var(--muted)">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" id="tshirt-group" style="display:none">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="tshirt-cb" style="width:18px;height:18px;accent-color:var(--red)">
+            <span>Order T-Shirt <strong style="color:var(--green)">($5 cash at finish)</strong></span>
+          </label>
+        </div>
+
+        <button class="btn btn-red btn-xl" id="btn-checkin" style="width:100%;justify-content:center" disabled>
+          ✓ Check In Runner
+        </button>
+      </div>
+    </div>
+
+    <!-- Right: recent check-ins -->
+    <div>
+      <div class="card">
+        <div class="card-title">Today's Check-Ins</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Bib</th><th>Name</th><th>Category</th><th>T-Shirt</th><th>Time</th></tr>
+            </thead>
+            <tbody id="checkin-tbody">
+              <tr><td colspan="5" style="color:var(--muted);text-align:center">No check-ins yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mt-16">
+        <div class="card-title">Statistics</div>
+        <div class="grid-3">
+          <div>
+            <div class="metric green" id="s-total">—</div>
+            <div class="metric-label">Total</div>
+          </div>
+          <div>
+            <div class="metric blue" id="s-checked">—</div>
+            <div class="metric-label">Checked In</div>
+          </div>
+          <div>
+            <div class="metric orange" id="s-tshirts">—</div>
+            <div class="metric-label">T-Shirts ($<span id="s-rev">0</span>)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Success overlay -->
+<div class="modal-overlay hidden" id="success-overlay">
+  <div class="modal-box" style="text-align:center;max-width:360px">
+    <div style="font-size:3rem">✅</div>
+    <div class="modal-title" style="margin-top:12px">Checked In!</div>
+    <div class="receipt">
+      <div class="receipt-bib" id="succ-bib">—</div>
+      <div class="bold" id="succ-name" style="font-size:1.2rem;margin-top:8px">—</div>
+      <div id="succ-cat" style="margin-top:4px"></div>
+      <div id="succ-tshirt" style="margin-top:8px;color:var(--green);font-weight:700"></div>
+      <div id="succ-time" style="margin-top:4px;font-size:.8rem;color:var(--muted)"></div>
+    </div>
+    <button class="btn btn-red btn-lg mt-16" id="btn-next" style="width:100%;justify-content:center">
+      Next Runner →
+    </button>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let currentRunner = null;
+let detectedBib   = null;
+
+async function lookupBib(bib) {
+  bib = bib.trim();
+  if (!bib) return;
+  try {
+    const runners = await api('GET', '/runners');
+    const r = runners.find(x => x.bib_number === bib);
+    if (!r) {
+      notify('Not Found', `Bib ${bib} is not registered.`);
+      clearPreview(); return;
+    }
+    showPreview(r);
+  } catch (err) { notify('Error', err.message); }
+}
+
+function showPreview(r) {
+  currentRunner = r;
+  document.getElementById('prev-bib').textContent  = r.bib_number;
+  document.getElementById('prev-name').textContent = r.name;
+  document.getElementById('prev-cat').innerHTML    = catBadge(r.category);
+  document.getElementById('prev-status').textContent =
+    r.checkin_time ? '⚠ Already checked in at ' + new Date(r.checkin_time).toLocaleTimeString() : 'Not yet checked in';
+  document.getElementById('runner-preview').style.display = 'block';
+  document.getElementById('tshirt-group').style.display   = 'block';
+  document.getElementById('tshirt-cb').checked = !!r.tshirt;
+  document.getElementById('btn-checkin').disabled = false;
+}
+
+function clearPreview() {
+  currentRunner = null;
+  document.getElementById('runner-preview').style.display = 'none';
+  document.getElementById('tshirt-group').style.display   = 'none';
+  document.getElementById('btn-checkin').disabled = true;
+}
+
+// ── Bib input ──
+const bibInput = document.getElementById('bib-input');
+bibInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') lookupBib(bibInput.value);
+});
+bibInput.addEventListener('input', () => {
+  if (bibInput.value.length >= 3) lookupBib(bibInput.value);
+});
+
+// ── Photo detection ──
+document.getElementById('photo-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('photo', file);
+  try {
+    const r = await api('POST', '/detect', fd);
+    detectedBib = r.bib;
+    document.getElementById('detected-bib-display').textContent = r.bib;
+    document.getElementById('det-conf').textContent  = `${(r.confidence * 100).toFixed(1)}%`;
+    document.getElementById('det-ms').textContent    = `${r.inference_ms} ms`;
+    document.getElementById('detect-result').style.display = 'block';
+    notify('YOLO26', `Detected bib ${r.bib} (${(r.confidence*100).toFixed(1)}% conf)`,
+      r.confidence > 0.8 ? 'var(--green)' : 'var(--orange)');
+  } catch (err) { notify('Detection Error', err.message); }
+});
+
+document.getElementById('btn-use-detected').addEventListener('click', () => {
+  if (!detectedBib) return;
+  bibInput.value = detectedBib;
+  lookupBib(detectedBib);
+});
+
+// ── Check-in ──
+document.getElementById('btn-checkin').addEventListener('click', async () => {
+  if (!currentRunner) return;
+  const tshirt = document.getElementById('tshirt-cb').checked ? 1 : 0;
+  const fd = new FormData();
+  fd.append('tshirt', tshirt);
+  try {
+    const updated = await api('POST', `/checkin/${currentRunner.bib_number}`, fd);
+    showSuccess(updated);
+    loadCheckins();
+    loadStats();
+  } catch (err) { notify('Error', err.message); }
+});
+
+function showSuccess(r) {
+  document.getElementById('succ-bib').textContent  = r.bib_number;
+  document.getElementById('succ-name').textContent = r.name;
+  document.getElementById('succ-cat').innerHTML    = catBadge(r.category);
+  document.getElementById('succ-tshirt').textContent =
+    r.tshirt ? '👕 T-Shirt ordered — $5 at finish' : '';
+  document.getElementById('succ-time').textContent =
+    'Checked in at ' + new Date(r.checkin_time).toLocaleTimeString();
+  document.getElementById('success-overlay').classList.remove('hidden');
+}
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  document.getElementById('success-overlay').classList.add('hidden');
+  bibInput.value = '';
+  document.getElementById('photo-input').value = '';
+  document.getElementById('detect-result').style.display = 'none';
+  clearPreview();
+  bibInput.focus();
+});
+
+async function loadCheckins() {
+  const runners = await api('GET', '/runners');
+  const checked = runners.filter(r => r.checkin_time).sort(
+    (a, b) => new Date(b.checkin_time) - new Date(a.checkin_time)
+  );
+  const tb = document.getElementById('checkin-tbody');
+  if (!checked.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="color:var(--muted);text-align:center">No check-ins yet</td></tr>';
+    return;
+  }
+  tb.innerHTML = checked.map(r => `
+    <tr>
+      <td class="bold mono">${r.bib_number}</td>
+      <td>${r.name}</td>
+      <td>${catBadge(r.category)}</td>
+      <td>${r.tshirt ? '<span style="color:var(--green)">✓ $5</span>' : '—'}</td>
+      <td style="font-size:.8rem">${new Date(r.checkin_time).toLocaleTimeString()}</td>
+    </tr>`).join('');
+}
+
+async function loadStats() {
+  const s = await api('GET', '/stats');
+  document.getElementById('s-total').textContent   = s.total_runners;
+  document.getElementById('s-checked').textContent = s.checked_in;
+  document.getElementById('s-tshirts').textContent = s.tshirt_orders;
+  document.getElementById('s-rev').textContent     = s.tshirt_revenue.toFixed(0);
+}
+
+// ── WebSocket ──
+connectWS((msg) => {
+  if (msg.type === 'checkin') { loadCheckins(); loadStats(); }
+});
+
+loadCheckins();
+loadStats();
+bibInput.focus();
+</script>
+</body>
+</html>

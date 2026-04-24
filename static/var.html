@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VAR Dashboard · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .queue-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+    .queue-chip {
+      flex-shrink: 0;
+      padding: 6px 16px;
+      border: 2px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 600;
+      background: var(--surface2);
+      transition: all .2s;
+    }
+    .queue-chip.selected  { border-color: var(--red); color: var(--red); }
+    .queue-chip.depth-bad { border-color: var(--orange); }
+    .empty-var {
+      text-align: center;
+      padding: 80px 0;
+      color: var(--muted);
+    }
+    .empty-var .icon { font-size: 4rem; }
+    .override-form { display: none; }
+    .override-form.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="live-dot"></div>
+  <div>
+    <div class="header-brand">🏁 BIG RED COMMAND CENTER</div>
+    <div class="header-sub">VAR — Video Assistant Referee</div>
+  </div>
+  <nav class="nav">
+    <a href="/">Dashboard</a>
+    <a href="/checkin">Check-In</a>
+    <a href="/var" class="active">VAR</a>
+    <a href="/results">Results</a>
+  </nav>
+</header>
+
+<div class="container">
+
+  <!-- Pending queue strip -->
+  <div class="card" style="padding:14px 20px">
+    <div class="flex items-center justify-between" style="margin-bottom:10px">
+      <div class="card-title" style="margin-bottom:0">Pending Review Queue</div>
+      <div>
+        <span id="queue-count" class="badge badge-pending">0 pending</span>
+      </div>
+    </div>
+    <div class="queue-strip" id="queue-strip">
+      <div style="color:var(--muted);font-size:.85rem;align-self:center">No pending events</div>
+    </div>
+  </div>
+
+  <!-- Main VAR panel -->
+  <div id="var-empty" class="card mt-16">
+    <div class="empty-var">
+      <div class="icon">✅</div>
+      <div class="section-title mt-8">All Clear</div>
+      <div style="color:var(--muted)">No pending VAR events. New finishes will appear here automatically.</div>
+    </div>
+  </div>
+
+  <div id="var-panel" class="mt-16" style="display:none">
+
+    <!-- Side-by-side images -->
+    <div class="var-split">
+      <div class="var-panel">
+        <div class="var-panel-label">📋 Master Bib (Check-In Photo)</div>
+        <div class="var-image-area" id="master-img-wrap">
+          <div class="var-placeholder">
+            <div class="var-bib-overlay" id="master-bib-big">—</div>
+            <div style="font-size:.8rem;margin-top:8px">No check-in photo</div>
+          </div>
+        </div>
+      </div>
+      <div class="var-panel">
+        <div class="var-panel-label">🎥 Finish Line Crop (Side-View Line Scan)</div>
+        <div class="var-image-area" id="finish-img-wrap">
+          <div class="var-placeholder">
+            <div class="var-bib-overlay" id="finish-bib-big">—</div>
+            <div style="font-size:.8rem;margin-top:8px">Simulated finish crop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info row -->
+    <div class="card">
+      <div class="var-info-row">
+        <div class="var-info-block">
+          <div class="var-info-label">Detected Bib</div>
+          <div class="var-info-value red" id="info-bib">—</div>
+        </div>
+        <div class="var-info-block">
+          <div class="var-info-label">Finish Time</div>
+          <div class="var-info-value green mono" id="info-time">—</div>
+        </div>
+        <div class="var-info-block">
+          <div class="var-info-label">Runner</div>
+          <div class="var-info-value" id="info-name" style="font-size:1.1rem">—</div>
+        </div>
+      </div>
+
+      <!-- Depth indicator -->
+      <div class="flex items-center gap-12 mt-8">
+        <div style="min-width:120px">
+          <div class="var-info-label">IR Depth Reading</div>
+          <div class="bold" id="depth-value">— mm</div>
+        </div>
+        <div style="flex:1">
+          <div class="flex justify-between" style="font-size:.72rem;color:var(--muted);margin-bottom:4px">
+            <span>0 m</span>
+            <span id="depth-label">—</span>
+            <span>2 m</span>
+          </div>
+          <div class="depth-bar">
+            <div class="depth-bar-fill" id="depth-fill" style="width:0%;background:var(--green)"></div>
+          </div>
+        </div>
+        <div id="depth-status" class="badge" style="min-width:70px;text-align:center">—</div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="card mt-16">
+      <div class="var-actions">
+        <button class="btn btn-green btn-xl" id="btn-accept">
+          ↵ ACCEPT
+        </button>
+        <button class="btn btn-orange btn-lg" id="btn-override-open">
+          ✏ OVERRIDE BIB
+        </button>
+        <button class="btn btn-gray btn-lg" id="btn-reject">
+          ✗ REJECT
+        </button>
+      </div>
+      <div class="key-hint mt-8">
+        <span><span class="key-badge">Enter</span> Accept</span>
+        <span><span class="key-badge">O</span> Override</span>
+        <span><span class="key-badge">R</span> Reject</span>
+        <span><span class="key-badge">←</span><span class="key-badge">→</span> Navigate queue</span>
+      </div>
+
+      <!-- Override form -->
+      <div class="override-form" id="override-form">
+        <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+        <div class="section-title">Override: Enter Correct Bib</div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label>Correct Bib Number</label>
+            <input id="override-bib" type="text" placeholder="e.g. 103"
+              style="font-size:1.5rem;letter-spacing:3px;text-align:center">
+          </div>
+          <div class="form-group">
+            <label>Notes (optional)</label>
+            <input id="override-notes" type="text" placeholder="e.g. Runner obscured bib">
+          </div>
+        </div>
+        <div class="flex gap-8">
+          <button class="btn btn-orange btn-lg" id="btn-override-confirm">Confirm Override</button>
+          <button class="btn btn-gray btn-lg" id="btn-override-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let queue       = [];
+let currentIdx  = 0;
+let raceStart   = null;
+
+async function getRaceStart() {
+  const s = await api('GET', '/race/status');
+  raceStart = s.race_start || null;
+}
+
+async function loadQueue() {
+  try {
+    queue = await api('GET', '/var/queue');
+    renderQueueStrip();
+    if (queue.length > 0) {
+      if (currentIdx >= queue.length) currentIdx = 0;
+      showEvent(currentIdx);
+    } else {
+      showEmpty();
+    }
+    document.getElementById('queue-count').textContent = `${queue.length} pending`;
+  } catch (err) { console.error(err); }
+}
+
+function renderQueueStrip() {
+  const strip = document.getElementById('queue-strip');
+  if (!queue.length) {
+    strip.innerHTML = '<div style="color:var(--muted);font-size:.85rem;align-self:center">No pending events</div>';
+    return;
+  }
+  strip.innerHTML = queue.map((e, i) => `
+    <div class="queue-chip ${i === currentIdx ? 'selected' : ''} ${e.depth_ok ? '' : 'depth-bad'}"
+         onclick="selectEvent(${i})">
+      Bib ${e.bib_number}
+      ${e.depth_ok ? '' : ' ⚠'}
+    </div>`).join('');
+}
+
+function selectEvent(idx) {
+  currentIdx = idx;
+  renderQueueStrip();
+  showEvent(idx);
+}
+
+function showEmpty() {
+  document.getElementById('var-empty').style.display = 'block';
+  document.getElementById('var-panel').style.display = 'none';
+}
+
+function showEvent(idx) {
+  const e = queue[idx];
+  if (!e) { showEmpty(); return; }
+
+  document.getElementById('var-empty').style.display = 'none';
+  document.getElementById('var-panel').style.display = 'block';
+
+  // Bib numbers in panels
+  document.getElementById('master-bib-big').textContent  = e.bib_number;
+  document.getElementById('finish-bib-big').textContent  = e.detected_bib || e.bib_number;
+
+  // Check-in photo
+  const masterWrap = document.getElementById('master-img-wrap');
+  if (e.checkin_photo) {
+    masterWrap.innerHTML = `<img src="${e.checkin_photo}" alt="Check-in photo">`;
+  } else {
+    masterWrap.innerHTML = `<div class="var-placeholder">
+      <div class="var-bib-overlay">${e.bib_number}</div>
+      <div style="font-size:.8rem;margin-top:8px">No check-in photo</div>
+    </div>`;
+  }
+
+  // Finish photo
+  const finishWrap = document.getElementById('finish-img-wrap');
+  if (e.photo_path) {
+    finishWrap.innerHTML = `<img src="${e.photo_path}" alt="Finish photo">`;
+  } else {
+    finishWrap.innerHTML = `<div class="var-placeholder">
+      <div class="var-bib-overlay">${e.detected_bib || e.bib_number}</div>
+      <div style="font-size:.8rem;margin-top:8px">Simulated finish crop</div>
+    </div>`;
+  }
+
+  // Info row
+  document.getElementById('info-bib').textContent  = e.bib_number;
+  document.getElementById('info-name').textContent = e.name || '— unknown —';
+
+  const elapsed = raceStart ? e.timestamp - raceStart : null;
+  document.getElementById('info-time').textContent = elapsed != null ? fmtElapsed(elapsed) : fmtWall(e.timestamp);
+
+  // Depth
+  const mm      = e.depth_mm || 0;
+  const depthPct = Math.min(100, (mm / 2000) * 100);
+  document.getElementById('depth-value').textContent = fmtDepth(mm);
+  document.getElementById('depth-fill').style.width  = `${depthPct}%`;
+  document.getElementById('depth-fill').style.background = e.depth_ok ? 'var(--green)' : 'var(--orange)';
+  document.getElementById('depth-label').textContent = fmtDepth(mm);
+
+  const statusEl = document.getElementById('depth-status');
+  if (e.depth_ok) {
+    statusEl.textContent = '✓ OK';
+    statusEl.className   = 'badge badge-accepted';
+  } else {
+    statusEl.textContent = '⚠ FAR';
+    statusEl.className   = 'badge badge-pending';
+  }
+
+  // Reset override form
+  closeOverride();
+}
+
+// ── Accept ──
+async function doAccept() {
+  if (!queue[currentIdx]) return;
+  const e = queue[currentIdx];
+  try {
+    await api('POST', `/var/${e.id}/accept`);
+    notify('VAR — Accepted', `Bib ${e.bib_number} confirmed ✓`, 'var(--green)');
+    await loadQueue();
+  } catch (err) { notify('Error', err.message); }
+}
+
+// ── Override ──
+function openOverride() {
+  document.getElementById('override-form').classList.add('visible');
+  document.getElementById('override-bib').focus();
+}
+function closeOverride() {
+  document.getElementById('override-form').classList.remove('visible');
+  document.getElementById('override-bib').value  = '';
+  document.getElementById('override-notes').value = '';
+}
+
+async function doOverride() {
+  const e = queue[currentIdx];
+  if (!e) return;
+  const bib   = document.getElementById('override-bib').value.trim();
+  const notes = document.getElementById('override-notes').value.trim();
+  if (!bib) { notify('Validation', 'Enter the correct bib number.'); return; }
+  const fd = new FormData();
+  fd.append('correct_bib', bib);
+  fd.append('notes', notes);
+  try {
+    await api('POST', `/var/${e.id}/override`, fd);
+    notify('VAR — Override', `Bib corrected: ${e.bib_number} → ${bib}`, 'var(--orange)');
+    await loadQueue();
+  } catch (err) { notify('Error', err.message); }
+}
+
+// ── Reject ──
+async function doReject() {
+  const e = queue[currentIdx];
+  if (!e) return;
+  const fd = new FormData();
+  fd.append('notes', 'Rejected via VAR dashboard');
+  try {
+    await api('POST', `/var/${e.id}/reject`, fd);
+    notify('VAR — Rejected', `Event for bib ${e.bib_number} rejected`, 'var(--red)');
+    await loadQueue();
+  } catch (err) { notify('Error', err.message); }
+}
+
+// ── Button bindings ──
+document.getElementById('btn-accept').addEventListener('click', doAccept);
+document.getElementById('btn-override-open').addEventListener('click', openOverride);
+document.getElementById('btn-override-confirm').addEventListener('click', doOverride);
+document.getElementById('btn-override-cancel').addEventListener('click', closeOverride);
+document.getElementById('btn-reject').addEventListener('click', doReject);
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', (e) => {
+  // Don't trigger when typing in an input
+  if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doAccept(); }
+  if (e.key === 'o' || e.key === 'O')   { openOverride(); }
+  if (e.key === 'r' || e.key === 'R')   { doReject(); }
+  if (e.key === 'ArrowRight' && queue.length > 0) {
+    currentIdx = (currentIdx + 1) % queue.length;
+    renderQueueStrip(); showEvent(currentIdx);
+  }
+  if (e.key === 'ArrowLeft' && queue.length > 0) {
+    currentIdx = (currentIdx - 1 + queue.length) % queue.length;
+    renderQueueStrip(); showEvent(currentIdx);
+  }
+  if (e.key === 'Escape') closeOverride();
+});
+
+// ── WebSocket ──
+connectWS((msg) => {
+  if (['finish_detected','var_accepted','var_overridden','var_rejected'].includes(msg.type)) {
+    loadQueue();
+  }
+});
+
+// ── Init ──
+getRaceStart().then(loadQueue);
+setInterval(loadQueue, 8000);
+</script>
+</body>
+</html>
