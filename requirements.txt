@@ -6,14 +6,9 @@ python-multipart==0.0.9
 aiofiles==24.1.0
 httpx==0.27.2
 
-# ML / Computer vision — optional (graceful simulation fallback if absent)
-# Remove these lines if running on a device without a GPU or camera.
-# IMPORTANT FOR VERCEL: Leave these commented out! Vercel's serverless function limit
-# is 250MB, and these libraries (plus their dependencies) exceed 1GB. The app
-# will run in simulation mode on Vercel.
-# ultralytics>=8.3.0
-# opencv-python-headless>=4.10.0
-# easyocr>=1.7.2
+# ML / Computer vision — lightweight for Vercel (<150MB)
+# Ultralytics and EasyOCR removed to avoid 1GB PyTorch dependency
+opencv-python-headless>=4.10.0
 
 # Hardware — install only when using an Intel RealSense depth sensor
 # pip install pyrealsense2

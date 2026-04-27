@@ -24,6 +24,8 @@ CV2_AVAILABLE = False
 OCR_AVAILABLE = False
 DETECTION_MODE = "simulation"  # "visual_match" | "ocr" | "simulation"
 
+import httpx
+
 try:
     import cv2
     import numpy as np
@@ -31,18 +33,11 @@ try:
     DETECTION_MODE = "visual_match"
     logger.info("OpenCV loaded — visual fingerprinting active")
 except ImportError:
-    logger.warning("opencv-python not installed — using simulated bib detection. pip install opencv-python")
+    logger.warning("opencv-python not installed — using simulated bib detection.")
 
-try:
-    import easyocr
-    _ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-    OCR_AVAILABLE = True
-    logger.info("EasyOCR loaded — OCR fallback available")
-except ImportError:
-    _ocr_reader = None
-except Exception as exc:
-    _ocr_reader = None
-    logger.warning("EasyOCR init error (%s)", exc)
+# Always available via external API
+OCR_AVAILABLE = True
+logger.info("External OCR API (OCR.space) enabled")
 
 # Keep YOLO_ACTIVE for backward compat with main.py references
 YOLO_ACTIVE = CV2_AVAILABLE
@@ -116,7 +111,7 @@ def detect_bib(image_path: str, known_bibs: Optional[List[str]] = None) -> dict:
         return _simulate(known_bibs)
 
     # Basic detection: try OCR on the image
-    if OCR_AVAILABLE and _ocr_reader:
+    if OCR_AVAILABLE:
         return _detect_ocr(image_path, known_bibs)
 
     return _simulate(known_bibs)
@@ -187,7 +182,7 @@ def match_bib_visual(query_image_bytes: bytes, bib_photos: List[Dict]) -> dict:
         }
 
     # Fallback: try OCR
-    if OCR_AVAILABLE and _ocr_reader:
+    if OCR_AVAILABLE:
         result = _detect_ocr_bytes(query_image_bytes, [bp["bib_number"] for bp in bib_photos])
         result["inference_ms"] = ms
         return result
@@ -222,42 +217,47 @@ def compare_bibs(image1_bytes: bytes, image2_bytes: bytes) -> dict:
 # ── OCR Fallback ─────────────────────────────────────────────────────────────
 
 def _detect_ocr(image_path: str, known_bibs: Optional[List[str]] = None) -> dict:
-    t0 = time.time()
-    try:
-        results = _ocr_reader.readtext(image_path)
-        ms = round((time.time() - t0) * 1000, 1)
-
-        for (bbox, text, conf) in results:
-            digits = ''.join(c for c in text if c.isdigit())
-            if digits and (not known_bibs or digits in known_bibs):
-                return {
-                    "bib": digits,
-                    "confidence": round(conf, 3),
-                    "model": "EasyOCR",
-                    "inference_ms": ms,
-                    "bbox": [int(bbox[0][0]), int(bbox[0][1]), int(bbox[2][0]), int(bbox[2][1])],
-                    "method": "ocr",
-                }
-
-        return {"bib": None, "confidence": 0.0, "model": "EasyOCR", "inference_ms": ms, "bbox": [], "method": "ocr_no_match"}
-    except Exception as exc:
-        logger.warning("OCR error: %s", exc)
-        return _simulate(known_bibs)
-
+    with open(image_path, "rb") as f:
+        return _detect_ocr_bytes(f.read(), known_bibs)
 
 def _detect_ocr_bytes(image_bytes: bytes, known_bibs: Optional[List[str]] = None) -> dict:
-    """OCR on raw bytes."""
-    if not OCR_AVAILABLE or not _ocr_reader:
+    """OCR on raw bytes using external OCR.space API."""
+    if not OCR_AVAILABLE:
         return _simulate(known_bibs)
-    # Save temp file for easyocr
-    tmp = Path("uploads/_temp_ocr.jpg")
-    tmp.write_bytes(image_bytes)
-    result = _detect_ocr(str(tmp), known_bibs)
+        
+    t0 = time.time()
     try:
-        tmp.unlink()
-    except:
-        pass
-    return result
+        # OCR.space API (free tier limits: 500 req/day, max 1MB per image file for free API key)
+        api_key = os.getenv("OCR_SPACE_API_KEY", "helloworld")
+        
+        response = httpx.post(
+            "https://api.ocr.space/parse/image",
+            data={"apikey": api_key, "OCREngine": 2},
+            files={"file": ("image.jpg", image_bytes, "image/jpeg")},
+            timeout=10.0
+        )
+        data = response.json()
+        ms = round((time.time() - t0) * 1000, 1)
+
+        if not data.get("IsErroredOnProcessing") and data.get("ParsedResults"):
+            text = data["ParsedResults"][0].get("ParsedText", "")
+            # Find the first valid bib number in the text
+            for word in text.split():
+                digits = "".join(c for c in word if c.isdigit())
+                if digits and (not known_bibs or digits in known_bibs):
+                    return {
+                        "bib": digits,
+                        "confidence": 0.85,  # External API doesn't give confidence per word
+                        "model": "OCR.space",
+                        "inference_ms": ms,
+                        "bbox": [],
+                        "method": "ocr",
+                    }
+                    
+        return {"bib": None, "confidence": 0.0, "model": "OCR.space", "inference_ms": ms, "bbox": [], "method": "ocr_no_match"}
+    except Exception as exc:
+        logger.warning("External OCR API error: %s", exc)
+        return _simulate(known_bibs)
 
 
 # ── Simulation ───────────────────────────────────────────────────────────────
