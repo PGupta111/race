@@ -7,8 +7,9 @@ from typing import List, Optional
 
 if os.getenv("VERCEL"):
     DB_PATH = "/tmp/race.db"
-    if not os.path.exists(DB_PATH) and os.path.exists("race.db"):
-        shutil.copy2("race.db", DB_PATH)
+    base_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "race.db")
+    if not os.path.exists(DB_PATH) and os.path.exists(base_db):
+        shutil.copy2(base_db, DB_PATH)
 else:
     DB_PATH = "race.db"
 

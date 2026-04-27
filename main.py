@@ -57,7 +57,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 STATIC_DIR = Path("static")
 
 app.mount("/static",  StaticFiles(directory="static"),  name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 timer        = LineScanTimer()
 depth_sensor = DepthSensor()

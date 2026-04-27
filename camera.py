@@ -22,7 +22,13 @@ except ImportError:
     CV2_AVAILABLE = False
     logger.warning("opencv-python not installed — camera module disabled")
 
-CLIP_DIR    = Path("uploads")
+import os
+
+if os.getenv("VERCEL"):
+    CLIP_DIR = Path("/tmp/uploads")
+else:
+    CLIP_DIR = Path("uploads")
+CLIP_DIR.mkdir(exist_ok=True)
 FPS         = int(os.getenv("CAMERA_FPS", "30"))
 PRE_ROLL_S  = float(os.getenv("VIDEO_CLIP_PRE_S",  "2"))
 POST_ROLL_S = float(os.getenv("VIDEO_CLIP_POST_S", "3"))
