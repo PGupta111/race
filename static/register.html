@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Register · Big Red Race</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    .reg-container {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .reg-hero {
+      text-align: center;
+      padding: 40px 20px 30px;
+    }
+
+    .reg-hero h1 {
+      font-size: 2rem;
+      font-weight: 900;
+      background: var(--grad-red);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .reg-hero p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+
+    .reg-form {
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+
+    .field { margin-bottom: 20px; }
+
+    .field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 1rem;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus, .field select:focus {
+      outline: none;
+      border-color: var(--red);
+      box-shadow: 0 0 0 3px rgba(230,57,70,0.15);
+    }
+
+    .field select option { background: #1a1a2e; }
+
+    .reg-submit {
+      width: 100%;
+      padding: 14px;
+      background: var(--grad-red);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .reg-submit:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(230,57,70,0.3); }
+    .reg-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── Success / QR Screen ── */
+    .reg-success {
+      display: none;
+      text-align: center;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .reg-success.show { display: block; }
+    .reg-form.hide { display: none; }
+
+    .success-check {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--green-dim);
+      border: 3px solid var(--green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 2.5rem;
+    }
+
+    .success-name {
+      font-size: 1.5rem;
+      font-weight: 800;
+    }
+
+    .success-cat {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 4px;
+    }
+
+    .qr-box {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      display: inline-block;
+      margin: 24px 0;
+    }
+
+    .qr-instructions {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+
+    .qr-instructions strong { color: var(--green); }
+
+    .reg-another {
+      margin-top: 24px;
+      padding: 12px 24px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .share-btn {
+      margin-top: 12px;
+      padding: 10px 20px;
+      background: var(--blue-dim);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 10px;
+      color: var(--blue);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div>
+    <h1 class="header-brand">🏁 BIG RED RACE</h1>
+    <div class="header-sub">Runner Registration</div>
+  </div>
+</header>
+
+<div class="reg-container">
+
+  <div class="reg-hero">
+    <h1>Race Registration</h1>
+    <p>Sign up below. You'll receive a QR code to present at check-in on race day.</p>
+  </div>
+
+  <!-- Registration Form -->
+  <form class="reg-form" id="reg-form" onsubmit="return handleRegister(event)">
+    <div class="field">
+      <label for="name">Full Name *</label>
+      <input type="text" id="name" name="name" required placeholder="e.g. Alice Chen" autocomplete="name">
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" placeholder="alice@example.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label for="category">Category *</label>
+      <select id="category" name="category" required>
+        <option value="" disabled selected>Select your category</option>
+        <option value="Students">Students</option>
+        <option value="Alumni">Alumni</option>
+        <option value="Parents">Parents</option>
+        <option value="Faculty">Faculty</option>
+        <option value="Open">Open</option>
+      </select>
+    </div>
+
+    <button type="submit" class="reg-submit" id="submit-btn">Register →</button>
+  </form>
+
+  <!-- Success Screen -->
+  <div class="reg-success" id="success-screen">
+    <div class="success-check">✓</div>
+    <div class="success-name" id="s-name"></div>
+    <div class="success-cat" id="s-cat"></div>
+
+    <div class="qr-box">
+      <canvas id="qr-canvas"></canvas>
+    </div>
+
+    <div class="qr-instructions">
+      <strong>Screenshot this QR code</strong> and present it at the check-in tent on race day.
+      A volunteer will scan it and assign you a bib number.
+    </div>
+
+    <button class="share-btn" id="share-btn" onclick="shareQR()">📤 Share / Save QR</button>
+    <br>
+    <button class="reg-another" onclick="resetForm()">+ Register Another Runner</button>
+  </div>
+
+</div>
+
+<script>
+async function handleRegister(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Registering…';
+
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const category = document.getElementById('category').value;
+
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, category }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Registration failed');
+    }
+
+    const runner = await res.json();
+    showSuccess(runner);
+  } catch (err) {
+    alert('Error: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Register →';
+  }
+}
+
+function showSuccess(runner) {
+  document.getElementById('reg-form').classList.add('hide');
+  document.getElementById('success-screen').classList.add('show');
+  document.getElementById('s-name').textContent = runner.name;
+  document.getElementById('s-cat').textContent = runner.category;
+
+  // Generate QR code
+  const canvas = document.getElementById('qr-canvas');
+  QRCode.toCanvas(canvas, runner.registration_id, {
+    width: 220,
+    margin: 2,
+    color: { dark: '#1a1a2e', light: '#ffffff' },
+  });
+}
+
+function resetForm() {
+  document.getElementById('reg-form').classList.remove('hide');
+  document.getElementById('success-screen').classList.remove('show');
+  document.getElementById('reg-form').reset();
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('submit-btn').textContent = 'Register →';
+}
+
+async function shareQR() {
+  const canvas = document.getElementById('qr-canvas');
+  try {
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const file = new File([blob], 'race-qr-code.png', { type: 'image/png' });
+
+    if (navigator.share && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: 'Big Red Race - QR Code',
+        text: 'Here is your race check-in QR code. Show this at the check-in tent on race day!',
+        files: [file],
+      });
+    } else {
+      // Fallback: download
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'race-qr-code.png';
+      a.click();
+    }
+  } catch {}
+}
+</script>
+</body>
+</html>

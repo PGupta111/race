@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Announcer · Big Red</title>
+  <meta name="description" content="Real-time announcer feed — see runner names before they reach you.">
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body { overflow: hidden; }
+
+    .announcer-container {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top bar: small, unobtrusive */
+    .announcer-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 32px;
+      background: rgba(0,0,0,0.4);
+      border-bottom: 1px solid rgba(230,57,70,0.2);
+    }
+
+    .announcer-top-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .announcer-top-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .announcer-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 10px rgba(0,214,143,0.3);
+    }
+
+    /* Main area: giant name display */
+    .announcer-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+      gap: 16px;
+    }
+
+    .a-waiting {
+      color: var(--muted);
+      font-size: 1.2rem;
+    }
+
+    .a-waiting-icon {
+      font-size: 5rem;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .a-bib {
+      font-size: 10rem;
+      font-weight: 900;
+      color: var(--red);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 10px;
+      text-shadow: 0 0 80px rgba(230,57,70,0.5), 0 0 120px rgba(230,57,70,0.2);
+      line-height: 1;
+      animation: bibPulse 2s ease-in-out infinite;
+    }
+
+    .a-name {
+      font-size: 4.5rem;
+      font-weight: 900;
+      letter-spacing: -1px;
+      line-height: 1.1;
+      max-width: 90vw;
+      word-break: break-word;
+    }
+
+    .a-category {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+
+    .a-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 20px rgba(0,214,143,0.3);
+      margin-top: 12px;
+    }
+
+    .a-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 20px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-top: 8px;
+    }
+
+    .a-status-pending {
+      background: var(--orange-dim);
+      border: 1px solid rgba(255,159,67,0.3);
+      color: var(--orange);
+    }
+
+    .a-status-accepted {
+      background: var(--green-dim);
+      border: 1px solid rgba(0,214,143,0.3);
+      color: var(--green);
+    }
+
+    /* Bottom ticker feed */
+    .announcer-ticker {
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid rgba(230,57,70,0.15);
+      padding: 14px 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .ticker-inner {
+      display: flex;
+      gap: 60px;
+      white-space: nowrap;
+      animation: tickerScroll 40s linear infinite;
+      padding: 0 20px;
+    }
+
+    .ticker-item {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .ticker-bib {
+      color: var(--red);
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ticker-name { color: var(--text); }
+    .ticker-time { color: var(--green); font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
+    .ticker-sep  { color: var(--muted); }
+
+    @keyframes tickerScroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* Entry animation for new runner */
+    .a-entry { animation: announceEntry 0.6s cubic-bezier(0.16,1,0.3,1) both; }
+
+    @keyframes announceEntry {
+      from { opacity: 0; transform: scale(0.8) translateY(40px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .a-bib { font-size: 5rem; letter-spacing: 4px; }
+      .a-name { font-size: 2.5rem; }
+      .a-category { font-size: 1rem; }
+      .a-time { font-size: 1.4rem; }
+    }
+
+    /* ── INCOMING runners panel ── */
+    .incoming-panel {
+      position: fixed;
+      top: 60px;
+      right: 24px;
+      width: 320px;
+      z-index: 20;
+    }
+
+    .incoming-label {
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .incoming-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,159,67,0.25);
+      border-left: 4px solid var(--orange);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      animation: slideInRight 0.4s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @keyframes slideInRight {
+      from { transform: translateX(120%); opacity: 0; }
+      to   { transform: translateX(0); opacity: 1; }
+    }
+
+    .inc-bib {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--orange);
+    }
+
+    .inc-name {
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .inc-cat {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .inc-arrow {
+      font-size: 1.5rem;
+      color: var(--orange);
+      animation: arrowPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes arrowPulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="announcer-container">
+
+  <!-- Top bar -->
+  <div class="announcer-top">
+    <div class="announcer-top-left">
+      <div class="live-dot"></div>
+      <div class="announcer-top-title">Announcer · Big Red</div>
+    </div>
+    <div class="announcer-clock" id="a-clock">0:00.000</div>
+  </div>
+
+  <!-- Main display -->
+  <div class="announcer-main" id="a-main">
+    <div class="a-waiting" id="a-waiting">
+      <div class="a-waiting-icon">🏁</div>
+      <div style="font-size:1.5rem;font-weight:700;margin-bottom:8px">Waiting for Finishers</div>
+      <div>Runner names appear here automatically as they cross the line.</div>
+    </div>
+  </div>
+
+  <!-- Bottom ticker -->
+  <div class="announcer-ticker" id="a-ticker" style="display:none">
+    <div class="ticker-inner" id="ticker-inner"></div>
+  </div>
+
+</div>
+
+<!-- INCOMING runners panel -->
+<div class="incoming-panel" id="incoming-panel" style="display:none">
+  <div class="incoming-label">🏃 INCOMING</div>
+  <div id="incoming-list"></div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let raceStart = null;
+let clockInterval = null;
+let feedData = [];
+
+function tickClock() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  document.getElementById('a-clock').textContent = fmtElapsed(elapsed);
+}
+
+function showRunner(event) {
+  const main = document.getElementById('a-main');
+  const name = event.runner_name || event.name || 'Unknown Runner';
+  const bib = event.bib_number || '???';
+  const cat = event.runner_category || event.category || '';
+  const elapsed = raceStart ? event.timestamp - raceStart : null;
+  const timeStr = elapsed != null ? fmtElapsed(elapsed) : '';
+  const status = event.status || 'pending';
+
+  // Category color mapping
+  const catColors = {
+    'Students': 'var(--blue)',
+    'Alumni': 'var(--green)',
+    'Parents': 'var(--purple)'
+  };
+  const catColor = catColors[cat] || 'var(--text-secondary)';
+
+  main.innerHTML = `
+    <div class="a-entry">
+      <div class="a-bib">${bib}</div>
+      <div class="a-name">${name}</div>
+      <div class="a-category" style="color:${catColor}">${cat}</div>
+      ${timeStr ? `<div class="a-time">${timeStr}</div>` : ''}
+      <div class="a-status-badge ${status === 'accepted' || status === 'overridden' ? 'a-status-accepted' : 'a-status-pending'}">
+        ${status === 'accepted' || status === 'overridden' ? '✓ CONFIRMED' : '⏳ PENDING VAR'}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('a-waiting').style.display = 'none';
+}
+
+function renderTicker() {
+  if (!feedData.length) return;
+  const ticker = document.getElementById('a-ticker');
+  const inner = document.getElementById('ticker-inner');
+  ticker.style.display = 'block';
+
+  // Duplicate items for seamless loop
+  const items = feedData.slice(0, 15);
+  const html = items.map(f => `
+    <div class="ticker-item">
+      <span class="ticker-bib">#${f.bib_number}</span>
+      <span class="ticker-name">${f.name || '—'}</span>
+      <span class="ticker-time">${f.finish_time || '—'}</span>
+      <span class="ticker-sep">·</span>
+      <span style="color:${f.status === 'accepted' || f.status === 'overridden' ? 'var(--green)' : 'var(--orange)'}">${f.status}</span>
+    </div>
+  `).join('');
+
+  inner.innerHTML = html + html; // duplicate for seamless scroll
+}
+
+async function loadFeed() {
+  try {
+    feedData = await api('GET', '/announcer/feed');
+    renderTicker();
+    // Show the most recent finisher
+    if (feedData.length > 0) {
+      showRunner(feedData[0]);
+    }
+  } catch {}
+}
+
+async function loadClock() {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    }
+  } catch {}
+}
+
+// ── WebSocket ──
+connectWS((msg) => {
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+  }
+  if (msg.type === 'approaching_runner') {
+    showIncoming(msg.bib_number, msg.name, msg.category);
+  }
+  if (msg.type === 'finish_detected') {
+    // Remove from incoming if present
+    removeIncoming(msg.bib_number || (msg.event && msg.event.bib_number));
+    showRunner(msg.event || msg);
+    ChimeEngine.playFinishChime();
+    setTimeout(loadFeed, 500);
+  }
+  if (msg.type === 'var_accepted' || msg.type === 'var_overridden') {
+    const e = msg.event;
+    showRunner({...e, status: 'accepted'});
+    ChimeEngine.playPing();
+    loadFeed();
+  }
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('a-clock').textContent = '0:00.000';
+    document.getElementById('a-main').innerHTML = `
+      <div class="a-waiting" id="a-waiting">
+        <div class="a-waiting-icon">🏁</div>
+        <div style="font-size:1.5rem;font-weight:700;margin-bottom:8px">Waiting for Finishers</div>
+        <div>Runner names appear here automatically as they cross the line.</div>
+      </div>`;
+    document.getElementById('a-ticker').style.display = 'none';
+    clearIncoming();
+  }
+});
+
+// ── Incoming runner management ──
+const _incoming = new Map();
+
+function showIncoming(bib, name, category) {
+  if (_incoming.has(bib)) return;
+  const panel = document.getElementById('incoming-panel');
+  panel.style.display = 'block';
+  const list = document.getElementById('incoming-list');
+  const card = document.createElement('div');
+  card.className = 'incoming-card';
+  card.id = `inc-${bib}`;
+  card.innerHTML = `
+    <div class="inc-arrow">→</div>
+    <div class="inc-bib">#${bib}</div>
+    <div>
+      <div class="inc-name">${name}</div>
+      <div class="inc-cat">${category}</div>
+    </div>`;
+  list.appendChild(card);
+  const t = setTimeout(() => removeIncoming(bib), 20000);
+  _incoming.set(bib, t);
+}
+
+function removeIncoming(bib) {
+  if (!bib) return;
+  const el = document.getElementById(`inc-${bib}`);
+  if (el) el.remove();
+  const t = _incoming.get(bib);
+  if (t) clearTimeout(t);
+  _incoming.delete(bib);
+  if (_incoming.size === 0) {
+    document.getElementById('incoming-panel').style.display = 'none';
+  }
+}
+
+function clearIncoming() {
+  _incoming.forEach((t, bib) => { clearTimeout(t); removeIncoming(bib); });
+  _incoming.clear();
+  document.getElementById('incoming-panel').style.display = 'none';
+}
+
+loadClock();
+loadFeed();
+</script>
+</body>
+</html>

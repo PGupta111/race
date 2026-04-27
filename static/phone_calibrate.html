@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>CALIBRATE · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body { height: 100%; overflow-x: hidden; }
+
+    .cal-header {
+      text-align: center;
+      padding: 24px 16px 16px;
+    }
+
+    .cal-header h1 {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+
+    .cal-header p {
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-top: 4px;
+    }
+
+    .cal-section {
+      margin: 16px;
+    }
+
+    .cal-card {
+      background: var(--glass-bg);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .cal-card-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cal-result {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .cal-result:last-child { border-bottom: none; }
+
+    .cal-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
+    .cal-value { font-weight: 700; font-size: 0.9rem; }
+    .cal-pass  { color: var(--green); }
+    .cal-warn  { color: var(--orange); }
+    .cal-fail  { color: var(--red); }
+
+    .cal-btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .cal-btn-primary {
+      background: var(--grad-red);
+      color: white;
+    }
+
+    .cal-btn-secondary {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-secondary);
+    }
+
+    .phone-links {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .phone-link {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 16px 10px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      text-decoration: none;
+      color: var(--text);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .phone-link:active { transform: scale(0.97); }
+
+    .phone-link-icon { font-size: 2rem; }
+
+    .qr-area {
+      text-align: center;
+      margin-top: 16px;
+      padding: 16px;
+      background: rgba(255,255,255,0.03);
+      border-radius: var(--radius);
+    }
+
+    .qr-area p {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="cal-header">
+  <h1>🔧 CALIBRATION &amp; SETUP</h1>
+  <p>Run these tests before race day to verify all systems.</p>
+</div>
+
+<div class="cal-section">
+
+  <!-- 1. Network Test -->
+  <div class="cal-card">
+    <div class="cal-card-title">📡 Network Connectivity</div>
+    <div class="cal-result">
+      <span class="cal-label">Hub Connection</span>
+      <span class="cal-value" id="net-hub">testing…</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Latency (round-trip)</span>
+      <span class="cal-value" id="net-latency">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">WebSocket</span>
+      <span class="cal-value" id="net-ws">testing…</span>
+    </div>
+    <button class="cal-btn cal-btn-secondary" onclick="testNetwork()">Retest Network</button>
+  </div>
+
+  <!-- 2. Camera Test -->
+  <div class="cal-card">
+    <div class="cal-card-title">📷 Camera Access</div>
+    <div class="cal-result">
+      <span class="cal-label">Camera Permission</span>
+      <span class="cal-value" id="cam-perm">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Resolution</span>
+      <span class="cal-value" id="cam-res">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Frame Rate</span>
+      <span class="cal-value" id="cam-fps">—</span>
+    </div>
+    <video id="test-video" autoplay playsinline muted style="width:100%;border-radius:8px;margin-top:8px;display:none;max-height:200px;object-fit:cover"></video>
+    <button class="cal-btn cal-btn-secondary" onclick="testCamera()">Test Camera</button>
+  </div>
+
+  <!-- 3. YOLO Detection Test -->
+  <div class="cal-card">
+    <div class="cal-card-title">🤖 YOLO26 Bib Detection</div>
+    <div class="cal-result">
+      <span class="cal-label">YOLO Model</span>
+      <span class="cal-value" id="yolo-status">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Last Detection</span>
+      <span class="cal-value" id="yolo-last">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Inference Time</span>
+      <span class="cal-value" id="yolo-ms">—</span>
+    </div>
+    <button class="cal-btn cal-btn-secondary" onclick="testDetection()">Run Detection Test</button>
+  </div>
+
+  <!-- 4. Depth Sensor -->
+  <div class="cal-card">
+    <div class="cal-card-title">📏 LiDAR / Depth Sensor</div>
+    <div class="cal-result">
+      <span class="cal-label">WebXR Support</span>
+      <span class="cal-value" id="xr-support">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">LiDAR Available</span>
+      <span class="cal-value" id="lidar-avail">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Depth Mode</span>
+      <span class="cal-value" id="depth-mode">—</span>
+    </div>
+    <button class="cal-btn cal-btn-secondary" onclick="testDepth()">Test Depth Sensor</button>
+  </div>
+
+  <!-- 5. Audio/Chime Test -->
+  <div class="cal-card">
+    <div class="cal-card-title">🔔 Confirmation Chime</div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="cal-btn cal-btn-secondary" style="flex:1" onclick="ChimeEngine.playFinishChime()">Finish Chime</button>
+      <button class="cal-btn cal-btn-secondary" style="flex:1" onclick="ChimeEngine.playPing()">Ping</button>
+      <button class="cal-btn cal-btn-secondary" style="flex:1" onclick="ChimeEngine.playWarning()">Warning</button>
+    </div>
+  </div>
+
+  <!-- 6. System Status -->
+  <div class="cal-card">
+    <div class="cal-card-title">⚙ System Status</div>
+    <div class="cal-result">
+      <span class="cal-label">Registered Runners</span>
+      <span class="cal-value" id="sys-runners">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Checked In</span>
+      <span class="cal-value" id="sys-checked">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Race Status</span>
+      <span class="cal-value" id="sys-race">—</span>
+    </div>
+    <div class="cal-result">
+      <span class="cal-label">Sensor (Hub)</span>
+      <span class="cal-value" id="sys-sensor">—</span>
+    </div>
+  </div>
+
+  <!-- Phone Launch Links -->
+  <div class="cal-card">
+    <div class="cal-card-title">📱 Launch Phone Interfaces</div>
+    <div class="phone-links">
+      <a href="/phone/starter" class="phone-link">
+        <div class="phone-link-icon">▶</div>
+        <div>Starter</div>
+      </a>
+      <a href="/phone/side" class="phone-link">
+        <div class="phone-link-icon">📹</div>
+        <div>Side-View<br>Line Scanner</div>
+      </a>
+      <a href="/phone/front" class="phone-link">
+        <div class="phone-link-icon">📸</div>
+        <div>Front-View<br>Bib Detector</div>
+      </a>
+    </div>
+
+    <div class="qr-area">
+      <p>On each iPhone, open Safari and navigate to:</p>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;font-weight:700;color:var(--green);margin:8px 0">
+        http://<span id="hub-ip">—</span>:8900
+      </div>
+      <p>Then tap the appropriate link above.</p>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+// ── Network test ──
+async function testNetwork() {
+  const hubEl = document.getElementById('net-hub');
+  const latEl = document.getElementById('net-latency');
+
+  try {
+    const t0 = performance.now();
+    const s = await api('GET', '/stats');
+    const ms = Math.round(performance.now() - t0);
+    hubEl.innerHTML = '<span class="cal-pass">✓ Connected</span>';
+    latEl.innerHTML = `<span class="${ms < 100 ? 'cal-pass' : ms < 300 ? 'cal-warn' : 'cal-fail'}">${ms} ms</span>`;
+  } catch {
+    hubEl.innerHTML = '<span class="cal-fail">✗ Failed</span>';
+    latEl.innerHTML = '<span class="cal-fail">—</span>';
+  }
+}
+
+// ── Camera test ──
+async function testCamera() {
+  const permEl = document.getElementById('cam-perm');
+  const resEl = document.getElementById('cam-res');
+  const fpsEl = document.getElementById('cam-fps');
+  const vid = document.getElementById('test-video');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    vid.srcObject = stream;
+    vid.style.display = 'block';
+
+    vid.addEventListener('loadedmetadata', () => {
+      permEl.innerHTML = '<span class="cal-pass">✓ Granted</span>';
+      resEl.textContent = `${vid.videoWidth} × ${vid.videoHeight}`;
+      const track = stream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      fpsEl.textContent = settings.frameRate ? `${settings.frameRate} fps` : 'unknown';
+    });
+  } catch (err) {
+    permEl.innerHTML = `<span class="cal-fail">✗ ${err.name}</span>`;
+  }
+}
+
+// ── Detection test ──
+async function testDetection() {
+  const statusEl = document.getElementById('yolo-status');
+  const lastEl = document.getElementById('yolo-last');
+  const msEl = document.getElementById('yolo-ms');
+
+  const vid = document.getElementById('test-video');
+  if (!vid.srcObject) {
+    statusEl.innerHTML = '<span class="cal-warn">Open camera first</span>';
+    return;
+  }
+
+  statusEl.textContent = 'running…';
+
+  // Capture frame
+  const c = document.createElement('canvas');
+  c.width = vid.videoWidth;
+  c.height = vid.videoHeight;
+  c.getContext('2d').drawImage(vid, 0, 0);
+
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.9));
+  const fd = new FormData();
+  fd.append('photo', blob, 'calibration_test.jpg');
+
+  try {
+    const t0 = performance.now();
+    const det = await api('POST', '/detect', fd);
+    const ms = Math.round(performance.now() - t0);
+
+    statusEl.innerHTML = `<span class="cal-pass">✓ ${det.model}</span>`;
+    lastEl.innerHTML = det.bib
+      ? `<span class="cal-pass">Bib ${det.bib} (${(det.confidence * 100).toFixed(0)}%)</span>`
+      : '<span class="cal-warn">No bib detected</span>';
+    msEl.textContent = `${det.inference_ms || ms} ms`;
+  } catch (err) {
+    statusEl.innerHTML = `<span class="cal-fail">✗ ${err.message}</span>`;
+  }
+}
+
+// ── Depth test ──
+async function testDepth() {
+  const xrEl = document.getElementById('xr-support');
+  const lidarEl = document.getElementById('lidar-avail');
+  const modeEl = document.getElementById('depth-mode');
+
+  if ('xr' in navigator) {
+    xrEl.innerHTML = '<span class="cal-pass">✓ WebXR available</span>';
+    try {
+      const supported = await navigator.xr.isSessionSupported('immersive-ar');
+      lidarEl.innerHTML = supported
+        ? '<span class="cal-pass">✓ AR/LiDAR session supported</span>'
+        : '<span class="cal-warn">AR session not supported</span>';
+      modeEl.textContent = supported ? 'WebXR LiDAR' : 'Bib-size estimation';
+    } catch {
+      lidarEl.innerHTML = '<span class="cal-warn">Cannot check</span>';
+      modeEl.textContent = 'Bib-size estimation';
+    }
+  } else {
+    xrEl.innerHTML = '<span class="cal-warn">✗ WebXR not available</span>';
+    lidarEl.innerHTML = '<span class="cal-warn">Not available</span>';
+    modeEl.textContent = 'Bib-size estimation (fallback)';
+  }
+}
+
+// ── System status ──
+async function loadStatus() {
+  try {
+    const stats = await api('GET', '/stats');
+    document.getElementById('sys-runners').textContent = stats.total_runners;
+    document.getElementById('sys-checked').textContent = stats.checked_in;
+    document.getElementById('sys-race').innerHTML = stats.race_started
+      ? '<span class="cal-pass">Running ' + stats.elapsed_formatted + '</span>'
+      : '<span class="cal-warn">Not started</span>';
+    document.getElementById('sys-sensor').innerHTML = stats.sensor_real
+      ? '<span class="cal-pass">Real</span>'
+      : '<span class="cal-warn">Simulated</span>';
+  } catch {}
+}
+
+// WebSocket status
+let wsOk = false;
+connectWS(() => {
+  if (!wsOk) {
+    wsOk = true;
+    document.getElementById('net-ws').innerHTML = '<span class="cal-pass">✓ Connected</span>';
+  }
+});
+setTimeout(() => {
+  if (!wsOk) document.getElementById('net-ws').innerHTML = '<span class="cal-fail">✗ Not connected</span>';
+}, 3000);
+
+// Detect hub IP
+document.getElementById('hub-ip').textContent = location.hostname || 'localhost';
+
+// Auto-run tests
+testNetwork();
+loadStatus();
+testDepth();
+</script>
+</body>
+</html>

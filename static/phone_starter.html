@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>STARTER · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; touch-action: manipulation; }
+    body { display: flex; flex-direction: column; }
+
+    .starter-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px;
+    }
+
+    .starter-status {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .starter-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 30px rgba(0,214,143,0.3);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Big Start Button ── */
+    .start-btn {
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      font-size: 2.2rem;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: white;
+      position: relative;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      transition: all 0.3s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .start-btn.ready {
+      background: var(--grad-red);
+      box-shadow:
+        0 0 60px rgba(230,57,70,0.4),
+        0 0 120px rgba(230,57,70,0.15),
+        inset 0 -4px 20px rgba(0,0,0,0.3);
+      animation: btnPulse 2s ease-in-out infinite;
+    }
+
+    .start-btn.running {
+      background: linear-gradient(135deg, #1a3a1a, #0d1f0d);
+      box-shadow: 0 0 40px rgba(0,214,143,0.15);
+      cursor: default;
+      animation: none;
+    }
+
+    .start-btn.countdown {
+      background: var(--grad-red);
+      box-shadow: 0 0 100px rgba(230,57,70,0.6);
+      animation: none;
+    }
+
+    .start-btn:active.ready {
+      transform: scale(0.95);
+    }
+
+    @keyframes btnPulse {
+      0%, 100% { box-shadow: 0 0 60px rgba(230,57,70,0.4), 0 0 120px rgba(230,57,70,0.15); }
+      50%      { box-shadow: 0 0 80px rgba(230,57,70,0.6), 0 0 160px rgba(230,57,70,0.25); }
+    }
+
+    .start-btn::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.15) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    /* ── Countdown overlay ── */
+    .countdown-num {
+      font-size: 8rem;
+      font-weight: 900;
+      animation: countPop 0.8s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @keyframes countPop {
+      0%   { transform: scale(2); opacity: 0; }
+      40%  { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    .go-text {
+      font-size: 6rem;
+      font-weight: 900;
+      color: var(--green);
+      text-shadow: 0 0 60px rgba(0,214,143,0.5);
+      animation: goPop 0.5s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @keyframes goPop {
+      0%   { transform: scale(3); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Reset button ── */
+    .reset-area {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .reset-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--muted);
+      padding: 10px 24px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* ── Network status ── */
+    .net-status {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      font-size: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<div class="net-status">
+  <div class="dot" id="net-dot"></div>
+  <span id="net-label">connecting…</span>
+</div>
+
+<div class="starter-container">
+
+  <div class="starter-status">
+    <div class="live-dot"></div>
+    <span>RACE STARTER · BIG RED</span>
+  </div>
+
+  <div class="starter-clock" id="clock">0:00.000</div>
+
+  <button class="start-btn ready" id="start-btn">
+    START
+  </button>
+
+  <div style="font-size:0.75rem;color:var(--muted);text-align:center;max-width:280px" id="hint">
+    Tap to begin 3-2-1 countdown.<br>All phones will sync automatically.
+  </div>
+
+</div>
+
+<div class="reset-area" id="reset-area" style="display:none">
+  <button class="reset-btn" id="reset-btn">↺ EMERGENCY RESET</button>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let raceStart = null;
+let clockInterval = null;
+let state = 'ready'; // ready → countdown → running
+
+const btn = document.getElementById('start-btn');
+const clock = document.getElementById('clock');
+const hint = document.getElementById('hint');
+
+function tickClock() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  clock.textContent = fmtElapsed(elapsed);
+}
+
+function setNetStatus(ok) {
+  const dot = document.getElementById('net-dot');
+  const label = document.getElementById('net-label');
+  dot.className = ok ? 'dot dot-green' : 'dot dot-red';
+  label.textContent = ok ? 'connected to hub' : 'disconnected';
+}
+
+async function doCountdown() {
+  if (state !== 'ready') return;
+  state = 'countdown';
+  btn.className = 'start-btn countdown';
+
+  // Haptic feedback if available
+  if (navigator.vibrate) navigator.vibrate(50);
+
+  // 3
+  btn.innerHTML = '<div class="countdown-num">3</div>';
+  ChimeEngine.playPing();
+  if (navigator.vibrate) navigator.vibrate(100);
+  await sleep(1000);
+
+  // 2
+  btn.innerHTML = '<div class="countdown-num">2</div>';
+  ChimeEngine.playPing();
+  if (navigator.vibrate) navigator.vibrate(100);
+  await sleep(1000);
+
+  // 1
+  btn.innerHTML = '<div class="countdown-num">1</div>';
+  ChimeEngine.playPing();
+  if (navigator.vibrate) navigator.vibrate(100);
+  await sleep(1000);
+
+  // GO!
+  btn.innerHTML = '<div class="go-text">GO!</div>';
+  ChimeEngine.playFinishChime();
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+  // Fire the start
+  try {
+    await api('POST', '/race/start');
+  } catch (err) {
+    notify('Error', err.message);
+    state = 'ready';
+    btn.className = 'start-btn ready';
+    btn.innerHTML = 'START';
+    return;
+  }
+
+  await sleep(1500);
+  state = 'running';
+  btn.className = 'start-btn running';
+  btn.innerHTML = 'RUNNING';
+  hint.textContent = 'Race in progress. Clock synced.';
+  document.getElementById('reset-area').style.display = 'block';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+btn.addEventListener('click', () => {
+  if (state === 'ready') doCountdown();
+});
+
+document.getElementById('reset-btn').addEventListener('click', async () => {
+  if (!confirm('⚠ EMERGENCY RESET\n\nThis will reset the race clock and clear all finish data. Are you sure?')) return;
+  try {
+    await api('POST', '/race/reset');
+  } catch (err) { notify('Error', err.message); }
+});
+
+// WebSocket
+let wsConnected = false;
+connectWS((msg) => {
+  if (!wsConnected) { wsConnected = true; setNetStatus(true); }
+
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    state = 'running';
+    btn.className = 'start-btn running';
+    btn.innerHTML = 'RUNNING';
+    hint.textContent = 'Race in progress. Clock synced.';
+    document.getElementById('reset-area').style.display = 'block';
+  }
+
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    clock.textContent = '0:00.000';
+    state = 'ready';
+    btn.className = 'start-btn ready';
+    btn.innerHTML = 'START';
+    hint.innerHTML = 'Tap to begin 3-2-1 countdown.<br>All phones will sync automatically.';
+    document.getElementById('reset-area').style.display = 'none';
+  }
+
+  if (msg.type === 'finish_detected') {
+    ChimeEngine.playPing();
+  }
+});
+
+// Check existing state
+(async () => {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+      state = 'running';
+      btn.className = 'start-btn running';
+      btn.innerHTML = 'RUNNING';
+      hint.textContent = 'Race in progress. Clock synced.';
+      document.getElementById('reset-area').style.display = 'block';
+    }
+    setNetStatus(true);
+  } catch { setNetStatus(false); }
+})();
+</script>
+</body>
+</html>

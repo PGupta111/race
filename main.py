@@ -7,7 +7,7 @@ import random
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 from fastapi import (
     Depends, FastAPI, File, Form, HTTPException,
@@ -24,8 +24,10 @@ from camera import CV2_AVAILABLE, get_latest_frame, request_clip, start_capture,
 from database import (
     get_db, get_finish_event, get_race_start,
     init_db, seed_runners, set_race_start,
+    register_runner, lookup_by_registration,
+    search_runners, assign_bib, get_all_bib_photos,
 )
-from detection import YOLO_ACTIVE, detect_bib
+from detection import YOLO_ACTIVE, DETECTION_MODE
 from rate_limit import check_trigger_rate
 from sensors import DepthSensor
 from timing import DepthChecker, LineScanTimer, _fmt
@@ -36,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Big Red Command Center", version="2026.ULTRA-LIGHT")
+app = FastAPI(title="Big Red Command Center", version="2026.ULTRA-ELITE")
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,7 +77,7 @@ async def _validated_bytes(upload: UploadFile, max_bytes: int = _MAX_UPLOAD) -> 
 
 class ConnectionManager:
     def __init__(self):
-        self._connections: set[WebSocket] = set()
+        self._connections: Set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
@@ -86,7 +88,7 @@ class ConnectionManager:
 
     async def broadcast(self, payload: dict):
         text = json.dumps(payload)
-        dead: set[WebSocket] = set()
+        dead: Set[WebSocket] = set()
         for ws in self._connections:
             try:
                 await ws.send_text(text)
@@ -156,7 +158,17 @@ async def _record_finish(
             conn.close()
 
     event = get_finish_event(event_id)
-    await manager.broadcast({"type": "finish_detected", "event": event})
+    # Enrich broadcast with runner info for announcer
+    conn2 = get_db()
+    runner_row = conn2.execute(
+        "SELECT name, category FROM runners WHERE bib_number=?", (bib,)
+    ).fetchone()
+    conn2.close()
+    broadcast_event = {**event}
+    if runner_row:
+        broadcast_event["runner_name"] = runner_row["name"]
+        broadcast_event["runner_category"] = runner_row["category"]
+    await manager.broadcast({"type": "finish_detected", "event": broadcast_event})
     return event
 
 
@@ -203,96 +215,189 @@ def page_results():  return _html("results.html")
 @app.get("/receipt/{event_id}", response_class=HTMLResponse)
 def page_receipt(event_id: int):  return _html("receipt.html")
 
+@app.get("/announcer",       response_class=HTMLResponse)
+def page_announcer(): return _html("announcer.html")
 
-# ── Runner management ─────────────────────────────────────────────────────────
+@app.get("/overlay",         response_class=HTMLResponse)
+def page_overlay():   return _html("overlay.html")
+
+@app.get("/phone/side",      response_class=HTMLResponse)
+def page_phone_side():    return _html("phone_side.html")
+
+@app.get("/phone/front",     response_class=HTMLResponse)
+def page_phone_front():   return _html("phone_front.html")
+
+@app.get("/phone/starter",   response_class=HTMLResponse)
+def page_phone_starter(): return _html("phone_starter.html")
+
+@app.get("/phone/calibrate", response_class=HTMLResponse)
+def page_phone_calibrate(): return _html("phone_calibrate.html")
+
+@app.get("/register",        response_class=HTMLResponse)
+def page_register():  return _html("register.html")
+
+@app.get("/livestream",      response_class=HTMLResponse)
+def page_livestream(): return _html("livestream.html")
+
+
+# ── Registration ─────────────────────────────────────────────────────────────
+
+class RegisterIn(BaseModel):
+    name: str
+    email: str = ""
+    category: str
+
+
+@app.post("/api/register", status_code=201)
+def api_register(runner: RegisterIn):
+    """Public registration — no auth required. Returns runner with QR registration_id."""
+    r = register_runner(runner.name, runner.email, runner.category)
+    return r
+
+
+@app.get("/api/register/{reg_id}")
+def api_lookup_registration(reg_id: str):
+    """Lookup a runner by their QR registration UUID."""
+    r = lookup_by_registration(reg_id)
+    if not r:
+        raise HTTPException(404, "Registration not found")
+    return r
+
+
+@app.get("/api/runners/search")
+def api_search_runners(q: str = ""):
+    """Search runners by name for check-in."""
+    if len(q) < 2:
+        return []
+    return search_runners(q)
+
+
+# ── Runner list ──────────────────────────────────────────────────────────────
 
 @app.get("/api/runners")
 def list_runners():
     conn = get_db()
     rows = conn.execute(
-        "SELECT * FROM runners ORDER BY CAST(bib_number AS INTEGER)"
+        "SELECT * FROM runners ORDER BY name"
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-class RunnerIn(BaseModel):
-    bib_number: str
-    name: str
-    category: str
-    email: str = ""
+# ── Check-in (new flow: find runner → assign bib → check in) ─────────────────
 
-
-@app.post("/api/runners", status_code=201, dependencies=[Depends(require_token)])
-def create_runner(runner: RunnerIn):
-    import sqlite3 as _sqlite3
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO runners (bib_number, name, category, email) VALUES (?, ?, ?, ?)",
-            (runner.bib_number, runner.name, runner.category, runner.email),
-        )
-        conn.commit()
-    except _sqlite3.IntegrityError:
-        conn.close()
-        raise HTTPException(400, f"Bib {runner.bib_number} already registered")
-    conn.close()
-    return {"status": "ok", "bib": runner.bib_number}
-
-
-# ── Check-in ──────────────────────────────────────────────────────────────────
-
-@app.post("/api/checkin/{bib_number}", dependencies=[Depends(require_token)])
+@app.post("/api/checkin/{runner_id}", dependencies=[Depends(require_token)])
 async def checkin(
-    bib_number: str,
+    runner_id: int,
+    bib_number: str             = Form(...),
     tshirt: int                 = Form(0),
-    photo: Optional[UploadFile] = File(None),
+    bib_photo: Optional[UploadFile] = File(None),
 ):
+    """
+    Check in a runner after assigning a bib.
+    The volunteer has already found the runner (via QR or name search),
+    scanned a physical bib, and now submits the assignment.
+    """
     conn = get_db()
     runner = conn.execute(
-        "SELECT * FROM runners WHERE bib_number=?", (bib_number,)
+        "SELECT * FROM runners WHERE id=?", (runner_id,)
     ).fetchone()
     if not runner:
         conn.close()
-        raise HTTPException(404, f"Bib {bib_number} not found")
+        raise HTTPException(404, "Runner not found")
 
-    photo_path = ""
-    if photo and photo.filename:
-        data  = await _validated_bytes(photo)
-        fname = f"checkin_{bib_number}_{int(time.time())}.jpg"
+    # Save bib photo (the reference image for visual fingerprinting)
+    bib_photo_path = ""
+    if bib_photo and bib_photo.filename:
+        data = await _validated_bytes(bib_photo)
+        fname = f"bib_{bib_number}_{int(time.time())}.jpg"
         (UPLOAD_DIR / fname).write_bytes(data)
-        photo_path = f"/uploads/{fname}"
+        bib_photo_path = f"/uploads/{fname}"
 
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
-        "UPDATE runners SET checkin_time=?, tshirt=?, checkin_photo=? WHERE bib_number=?",
-        (now, tshirt, photo_path, bib_number),
+        """UPDATE runners
+           SET bib_number=?, bib_photo=?, checkin_time=?, tshirt=?
+           WHERE id=?""",
+        (bib_number, bib_photo_path, now, tshirt, runner_id),
     )
     conn.commit()
     updated = dict(conn.execute(
-        "SELECT * FROM runners WHERE bib_number=?", (bib_number,)
+        "SELECT * FROM runners WHERE id=?", (runner_id,)
     ).fetchone())
     conn.close()
     await manager.broadcast({"type": "checkin", "runner": updated})
     return updated
 
 
-# ── YOLO26 bib detection ──────────────────────────────────────────────────────
+
+# ── Visual Fingerprinting — Bib Detection ─────────────────────────────────────
+
+from detection import match_bib_visual, compare_bibs
 
 @app.post("/api/detect", dependencies=[Depends(require_token)])
 async def detect(photo: UploadFile = File(...)):
-    data  = await _validated_bytes(photo)
+    """
+    Detect a bib in a photo by visual matching against stored check-in bib photos.
+    Used by the front-view iPhone for both approach detection and finish capture.
+    """
+    data = await _validated_bytes(photo)
     fname = f"detect_{int(time.time()*1000)}.jpg"
     fpath = UPLOAD_DIR / fname
     fpath.write_bytes(data)
 
-    conn  = get_db()
-    known = [r["bib_number"] for r in conn.execute("SELECT bib_number FROM runners").fetchall()]
-    conn.close()
-
-    result = detect_bib(str(fpath), known)
+    bib_photos = get_all_bib_photos()
+    result = match_bib_visual(data, bib_photos)
     result["photo_path"] = f"/uploads/{fname}"
     return result
+
+
+@app.post("/api/detect/approach", dependencies=[Depends(require_token)])
+async def detect_approach(photo: UploadFile = File(...)):
+    """
+    Detect an approaching runner's bib. Same as /api/detect but also
+    broadcasts approaching_runner to announcer and livestream.
+    """
+    data = await _validated_bytes(photo)
+    fname = f"approach_{int(time.time()*1000)}.jpg"
+    fpath = UPLOAD_DIR / fname
+    fpath.write_bytes(data)
+
+    bib_photos = get_all_bib_photos()
+    result = match_bib_visual(data, bib_photos)
+    result["photo_path"] = f"/uploads/{fname}"
+
+    if result.get("bib"):
+        # Look up runner info
+        conn = get_db()
+        runner = conn.execute(
+            "SELECT name, category FROM runners WHERE bib_number=?",
+            (result["bib"],),
+        ).fetchone()
+        conn.close()
+
+        if runner:
+            await manager.broadcast({
+                "type": "approaching_runner",
+                "bib_number": result["bib"],
+                "name": runner["name"],
+                "category": runner["category"],
+                "confidence": result.get("confidence", 0),
+            })
+
+    return result
+
+
+@app.post("/api/detect/compare")
+async def detect_compare(
+    image1: UploadFile = File(...),
+    image2: UploadFile = File(...),
+):
+    """Compare two bib images for similarity. Used by VAR for manual verification."""
+    data1 = await _validated_bytes(image1)
+    data2 = await _validated_bytes(image2)
+    return compare_bibs(data1, data2)
+
 
 
 # ── Race clock ────────────────────────────────────────────────────────────────
@@ -364,6 +469,171 @@ async def timing_trigger(
         "depth_mm":    depth_mm,
         "detected_bib": detected_bib,
     }
+
+
+# ── iPhone Timing Pipeline — Crossing + Matching Engine ──────────────────────
+
+MATCH_WINDOW_S = 3.0  # Side-view crossing must match front-view within ±3s
+
+
+@app.post("/api/timing/crossing", dependencies=[Depends(require_token)])
+async def timing_crossing(
+    timestamp: float = Form(...),
+    ribbon_crop: Optional[UploadFile] = File(None),
+):
+    """
+    Called by the Side-View iPhone when a runner crosses the finish line.
+    Stores the crossing event and broadcasts to front-view for bib capture.
+    """
+    crop_path = ""
+    if ribbon_crop and ribbon_crop.filename:
+        data = await _validated_bytes(ribbon_crop)
+        fname = f"ribbon_{int(timestamp * 1000)}.jpg"
+        (UPLOAD_DIR / fname).write_bytes(data)
+        crop_path = f"/uploads/{fname}"
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db()
+    cur = conn.execute(
+        """INSERT INTO crossing_events (timestamp, ribbon_crop, created_at)
+           VALUES (?, ?, ?)""",
+        (timestamp, crop_path, now),
+    )
+    crossing_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    # Broadcast to front-view phone to capture bib NOW
+    elapsed = _fmt(timestamp - timer.race_start) if timer.race_start else "---"
+    await manager.broadcast({
+        "type": "crossing_detected",
+        "crossing_id": crossing_id,
+        "timestamp": timestamp,
+        "elapsed": elapsed,
+        "ribbon_crop": crop_path,
+    })
+
+    logger.info("Crossing #%d at %s", crossing_id, elapsed)
+    return {"crossing_id": crossing_id, "timestamp": timestamp, "elapsed": elapsed}
+
+
+@app.post("/api/timing/match", dependencies=[Depends(require_token)])
+async def timing_match(
+    crossing_id: int = Form(0),
+    bib_number: str = Form(...),
+    confidence: float = Form(0.0),
+    depth_mm: float = Form(0.0),
+    photo: Optional[UploadFile] = File(None),
+):
+    """
+    Called by the Front-View iPhone after detecting a bib.
+    Matches the bib detection to the nearest unmatched crossing event,
+    then creates a finish_event for VAR review.
+    """
+    conn = get_db()
+
+    # Find the crossing to match
+    if crossing_id > 0:
+        # Direct match by ID (best case — front-view knows which crossing)
+        crossing = conn.execute(
+            "SELECT * FROM crossing_events WHERE id=? AND matched=0",
+            (crossing_id,),
+        ).fetchone()
+    else:
+        # Auto-match: find nearest unmatched crossing within ±MATCH_WINDOW_S
+        now_ts = time.time()
+        crossing = conn.execute(
+            """SELECT * FROM crossing_events
+               WHERE matched=0 AND ABS(timestamp - ?) < ?
+               ORDER BY ABS(timestamp - ?) LIMIT 1""",
+            (now_ts, MATCH_WINDOW_S, now_ts),
+        ).fetchone()
+
+    if not crossing:
+        conn.close()
+        raise HTTPException(404, "No unmatched crossing found within time window")
+
+    crossing_ts = crossing["timestamp"]
+    cx_id = crossing["id"]
+
+    # Save front-view photo
+    photo_path = ""
+    if photo and photo.filename:
+        data = await _validated_bytes(photo)
+        fname = f"front_{bib_number}_{int(crossing_ts * 1000)}.jpg"
+        (UPLOAD_DIR / fname).write_bytes(data)
+        photo_path = f"/uploads/{fname}"
+
+    # Depth check
+    depth_ok = depth_check.check(depth_mm) if depth_mm > 0 else True
+
+    conn.close()
+
+    # Create the finish event using the crossing timestamp (the accurate one)
+    event = await _record_finish(
+        bib=bib_number,
+        detected_bib=bib_number,
+        depth_mm=depth_mm,
+        depth_ok=depth_ok,
+        photo_path=photo_path,
+    )
+
+    # Update the finish_event timestamp to the side-view crossing time (more accurate)
+    conn = get_db()
+    conn.execute(
+        "UPDATE finish_events SET timestamp=? WHERE id=?",
+        (crossing_ts, event["id"]),
+    )
+    # Mark crossing as matched
+    conn.execute(
+        "UPDATE crossing_events SET matched=1, matched_bib=?, finish_event_id=? WHERE id=?",
+        (bib_number, event["id"], cx_id),
+    )
+    conn.commit()
+    conn.close()
+
+    elapsed = _fmt(crossing_ts - timer.race_start) if timer.race_start else "---"
+    logger.info(
+        "MATCH: Crossing #%d → Bib %s at %s (conf=%.1f%%, depth=%s)",
+        cx_id, bib_number, elapsed, confidence * 100, fmtDepth(depth_mm),
+    )
+
+    return {
+        "event_id": event["id"],
+        "crossing_id": cx_id,
+        "bib_number": bib_number,
+        "timestamp": crossing_ts,
+        "elapsed": elapsed,
+        "confidence": confidence,
+        "depth_mm": depth_mm,
+        "depth_ok": depth_ok,
+    }
+
+
+def fmtDepth(mm):
+    """Format depth for logging."""
+    if not mm or mm < 0:
+        return "—"
+    return f"{mm:.0f}mm" if mm < 1000 else f"{mm/1000:.2f}m"
+
+
+@app.get("/api/timing/crossings")
+def list_crossings(unmatched_only: bool = True):
+    """List recent crossing events. Used for manual matching fallback."""
+    conn = get_db()
+    where = "WHERE matched=0" if unmatched_only else ""
+    rows = conn.execute(f"""
+        SELECT * FROM crossing_events {where}
+        ORDER BY timestamp DESC LIMIT 30
+    """).fetchall()
+    conn.close()
+    rs = get_race_start()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["elapsed"] = _fmt(r["timestamp"] - rs) if rs else "---"
+        result.append(r)
+    return result
 
 
 # ── Depth sensor ──────────────────────────────────────────────────────────────
@@ -488,8 +758,8 @@ def get_results(category: str = ""):
     where  = "AND r.category = ?" if category else ""
     params = (category,) if category else ()
     rows = conn.execute(f"""
-        SELECT r.bib_number, r.name, r.category,
-               MIN(fe.timestamp) AS finish_ts, fe.status
+        SELECT r.bib_number, r.name, r.category, r.bib_photo,
+               MIN(fe.timestamp) AS finish_ts, fe.status, fe.photo_path
         FROM runners r
         JOIN finish_events fe ON r.bib_number = fe.bib_number
         WHERE fe.status IN ('accepted', 'overridden') {where}
@@ -565,6 +835,32 @@ def admin_status():
         "pipeline_queue":   _pipeline_queue.qsize(),
         "ws_connections":   manager.count,
     }
+
+
+# ── Announcer feed ────────────────────────────────────────────────────────
+
+@app.get("/api/announcer/feed")
+def announcer_feed():
+    """Last 15 finishers with full runner details for the announcer tablet."""
+    conn = get_db()
+    rs = get_race_start()
+    rows = conn.execute("""
+        SELECT fe.id, fe.bib_number, fe.timestamp, fe.status, fe.depth_ok,
+               r.name, r.category
+        FROM   finish_events fe
+        LEFT JOIN runners r ON fe.bib_number = r.bib_number
+        ORDER BY fe.timestamp DESC
+        LIMIT 15
+    """).fetchall()
+    conn.close()
+    feed = []
+    for row in rows:
+        r = dict(row)
+        elapsed = r["timestamp"] - rs if rs else 0.0
+        r["finish_time"] = _fmt(elapsed)
+        r["elapsed_s"] = round(elapsed, 4)
+        feed.append(r)
+    return feed
 
 
 # ── Demo simulation ───────────────────────────────────────────────────────────

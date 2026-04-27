@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OBS Overlay · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body {
+      background: transparent !important;
+      overflow: hidden;
+      min-height: 100vh;
+    }
+    body::before { display: none !important; }
+
+    .obs-container {
+      position: fixed;
+      bottom: 40px;
+      left: 40px;
+      width: 420px;
+      z-index: 10;
+    }
+
+    .obs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: rgba(10,14,26,0.95);
+      border: 1px solid rgba(230,57,70,0.3);
+      border-bottom: none;
+      border-radius: 14px 14px 0 0;
+      backdrop-filter: blur(20px);
+    }
+
+    .obs-brand {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: var(--grad-red);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .obs-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 10px rgba(0,214,143,0.3);
+    }
+
+    .obs-body {
+      background: rgba(10,14,26,0.92);
+      border: 1px solid rgba(230,57,70,0.3);
+      border-top: 1px solid rgba(255,255,255,0.05);
+      border-radius: 0 0 14px 14px;
+      padding: 16px 20px 20px;
+      backdrop-filter: blur(20px);
+    }
+
+    .obs-cat-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .obs-cat-badge {
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+
+    .obs-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      animation: overlaySlideIn 0.4s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .obs-row:last-child { border-bottom: none; }
+
+    .obs-rank {
+      font-size: 1.3rem;
+      font-weight: 900;
+      min-width: 28px;
+      text-align: center;
+    }
+
+    .obs-rank.gold   { color: var(--gold); }
+    .obs-rank.silver { color: var(--silver); }
+    .obs-rank.bronze { color: var(--bronze); }
+
+    .obs-name {
+      flex: 1;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    .obs-bib {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .obs-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--green);
+      min-width: 70px;
+      text-align: right;
+    }
+
+    .obs-empty {
+      text-align: center;
+      padding: 20px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .obs-transition-enter {
+      animation: overlaySlideIn 0.5s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .obs-transition-exit {
+      animation: overlaySlideOut 0.4s cubic-bezier(0.7,0,0.84,0) both;
+    }
+
+    @keyframes overlaySlideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to   { transform: translateX(-30px); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="obs-container" id="obs-container">
+  <div class="obs-header">
+    <div class="obs-brand">🏁 Big Red</div>
+    <div class="obs-clock" id="obs-clock">0:00.000</div>
+  </div>
+  <div class="obs-body" id="obs-body">
+    <div class="obs-empty">Waiting for results…</div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let raceStart = null;
+let clockInterval = null;
+let allResults = { Students: [], Alumni: [], Parents: [] };
+let currentCatIdx = 0;
+const categories = ['Students', 'Alumni', 'Parents'];
+const catEmoji = { Students: '🎓', Alumni: '🏛', Parents: '👪' };
+const catColors = {
+  Students: { bg: 'var(--blue-dim)', color: 'var(--blue)', border: 'rgba(59,130,246,0.2)' },
+  Alumni:   { bg: 'var(--green-dim)', color: 'var(--green)', border: 'rgba(0,214,143,0.2)' },
+  Parents:  { bg: 'var(--purple-dim)', color: 'var(--purple)', border: 'rgba(167,139,250,0.2)' },
+};
+
+function tickClock() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  document.getElementById('obs-clock').textContent = fmtElapsed(elapsed);
+}
+
+function renderCategory(catName) {
+  const body = document.getElementById('obs-body');
+  const runners = allResults[catName] || [];
+  const top5 = runners.slice(0, 5);
+  const cc = catColors[catName];
+  const medals = ['gold', 'silver', 'bronze'];
+  const trophies = ['🥇', '🥈', '🥉'];
+
+  let html = `
+    <div class="obs-cat-label">
+      ${catEmoji[catName] || ''} TOP 5
+      <span class="obs-cat-badge" style="background:${cc.bg};color:${cc.color};border:1px solid ${cc.border}">${catName}</span>
+    </div>
+  `;
+
+  if (!top5.length) {
+    html += '<div class="obs-empty">No finishers yet</div>';
+  } else {
+    top5.forEach((r, i) => {
+      const rankCls = i < 3 ? medals[i] : '';
+      const rankDisplay = i < 3 ? trophies[i] : `#${i + 1}`;
+      html += `
+        <div class="obs-row" style="animation-delay: ${i * 0.08}s">
+          <div class="obs-rank ${rankCls}">${rankDisplay}</div>
+          <div class="obs-name">${r.name}</div>
+          <div class="obs-bib">#${r.bib_number}</div>
+          <div class="obs-time">${r.finish_time}</div>
+        </div>
+      `;
+    });
+  }
+
+  // Transition effect
+  body.classList.add('obs-transition-exit');
+  setTimeout(() => {
+    body.innerHTML = html;
+    body.classList.remove('obs-transition-exit');
+    body.classList.add('obs-transition-enter');
+    setTimeout(() => body.classList.remove('obs-transition-enter'), 500);
+  }, 400);
+}
+
+function rotateCat() {
+  const catName = categories[currentCatIdx];
+  renderCategory(catName);
+  currentCatIdx = (currentCatIdx + 1) % categories.length;
+}
+
+async function loadResults() {
+  try {
+    allResults = await api('GET', '/results/all');
+  } catch {}
+}
+
+async function loadClock() {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    }
+  } catch {}
+}
+
+// WebSocket
+connectWS((msg) => {
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+  }
+  if (['var_accepted', 'var_overridden'].includes(msg.type)) {
+    loadResults().then(() => renderCategory(categories[currentCatIdx === 0 ? 2 : currentCatIdx - 1]));
+  }
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('obs-clock').textContent = '0:00.000';
+    allResults = { Students: [], Alumni: [], Parents: [] };
+    document.getElementById('obs-body').innerHTML = '<div class="obs-empty">Waiting for results…</div>';
+  }
+});
+
+// Init
+loadClock();
+loadResults().then(rotateCat);
+
+// Rotate every 8 seconds
+setInterval(() => {
+  loadResults().then(rotateCat);
+}, 8000);
+</script>
+</body>
+</html>

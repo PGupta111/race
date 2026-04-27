@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>FRONT-VIEW · Bib Detector</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; touch-action: manipulation; }
+    body { display: flex; flex-direction: column; }
+
+    .front-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px;
+      background: rgba(0,0,0,0.6);
+      border-bottom: 1px solid rgba(59,130,246,0.2);
+      flex-shrink: 0; z-index: 10;
+    }
+
+    .front-title {
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--text-secondary);
+    }
+
+    .front-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem; font-weight: 700; color: var(--green);
+    }
+
+    .front-stats {
+      display: flex; gap: 8px; font-size: 0.6rem; font-weight: 600;
+    }
+
+    /* ── Camera area ── */
+    .camera-area {
+      flex: 1; position: relative; overflow: hidden; background: #000;
+    }
+
+    #video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Detection overlay */
+    .det-overlay {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none; z-index: 5;
+    }
+
+    .bbox {
+      position: absolute;
+      border: 3px solid var(--green);
+      border-radius: 4px;
+      box-shadow: 0 0 8px rgba(0,214,143,0.5);
+    }
+
+    .bbox-label {
+      position: absolute; top: -24px; left: 0;
+      background: rgba(0,214,143,0.9);
+      color: #000; font-size: 0.75rem; font-weight: 800;
+      padding: 2px 8px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Mode indicator */
+    .mode-indicator {
+      position: absolute; top: 10px; left: 16px;
+      z-index: 10; display: flex; gap: 6px;
+    }
+
+    .mode-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.6rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .mode-approach {
+      background: rgba(255,159,67,0.2);
+      border: 1px solid rgba(255,159,67,0.3);
+      color: var(--orange);
+    }
+
+    .mode-approach.active {
+      background: rgba(255,159,67,0.3);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    .mode-finish {
+      background: rgba(230,57,70,0.2);
+      border: 1px solid rgba(230,57,70,0.3);
+      color: var(--red);
+    }
+
+    .mode-finish.active {
+      background: rgba(230,57,70,0.4);
+      animation: pulse-dot 0.8s ease-in-out infinite;
+    }
+
+    /* Depth display */
+    .depth-display {
+      position: absolute; bottom: 16px; left: 16px;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px; padding: 8px 12px; z-index: 10;
+    }
+
+    .depth-label { font-size: 0.5rem; font-weight: 600; letter-spacing: 1px; color: var(--muted); }
+    .depth-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.2rem; font-weight: 700; color: var(--green);
+    }
+
+    /* Capture indicator */
+    .capture-dot {
+      position: absolute; top: 10px; right: 16px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--red); opacity: 0; z-index: 10;
+    }
+
+    .capture-dot.active { opacity: 1; animation: capturePulse 0.3s; }
+
+    @keyframes capturePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.5); } }
+
+    /* ── Crossing alert ── */
+    .crossing-alert {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      z-index: 30; text-align: center; pointer-events: none; opacity: 0;
+    }
+
+    .crossing-alert.show { animation: alertPop 1.5s cubic-bezier(0.16,1,0.3,1) both; }
+
+    @keyframes alertPop {
+      0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+      15%  { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+      30%  { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -50%) scale(0.9); opacity: 0; }
+    }
+
+    .crossing-alert-inner {
+      background: rgba(230,57,70,0.9); color: white;
+      padding: 12px 24px; border-radius: 12px;
+      font-size: 0.85rem; font-weight: 700; letter-spacing: 1px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* ── Bottom panel: recent detections ── */
+    .bottom-panel {
+      flex-shrink: 0;
+      background: rgba(0,0,0,0.7);
+      border-top: 1px solid rgba(59,130,246,0.2);
+      padding: 8px 16px;
+      max-height: 130px; overflow-y: auto;
+    }
+
+    .det-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.72rem;
+      animation: fadeUp 0.3s ease both;
+    }
+
+    .det-bib { font-family: 'JetBrains Mono', monospace; font-weight: 800; color: var(--red); min-width: 36px; }
+    .det-conf { color: var(--green); font-weight: 600; }
+    .det-time { font-family: 'JetBrains Mono', monospace; color: var(--text-secondary); font-size: 0.65rem; }
+    .det-method { font-size: 0.6rem; color: var(--muted); }
+    .det-status { margin-left: auto; font-size: 0.6rem; font-weight: 600; }
+    .det-matched { color: var(--green); }
+    .det-approach { color: var(--orange); }
+    .det-sent { color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<div class="front-header">
+  <div><div class="front-title">📸 Front-View · Visual Match</div></div>
+  <div class="front-stats">
+    <span style="color:var(--orange)"><span id="approach-count">0</span> seen</span>
+    <span style="color:var(--green)"><span id="match-count">0</span> matched</span>
+    <span><div class="dot" id="net-dot"></div></span>
+  </div>
+  <div class="front-clock" id="clock">0:00.000</div>
+</div>
+
+<div class="camera-area">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="work-canvas" style="display:none"></canvas>
+
+  <div class="det-overlay" id="det-overlay"></div>
+
+  <div class="mode-indicator">
+    <div class="mode-badge mode-approach" id="mode-approach">👁 SCANNING</div>
+    <div class="mode-badge mode-finish" id="mode-finish">⚡ CAPTURE</div>
+  </div>
+
+  <div class="depth-display">
+    <div class="depth-label">Depth</div>
+    <div class="depth-value" id="depth-value">— mm</div>
+  </div>
+
+  <div class="capture-dot" id="capture-dot"></div>
+
+  <div class="crossing-alert" id="crossing-alert">
+    <div class="crossing-alert-inner">🏃 CROSSING — CAPTURING BIB</div>
+  </div>
+</div>
+
+<div class="bottom-panel">
+  <div style="font-size:0.55rem;font-weight:600;letter-spacing:1px;color:var(--muted);margin-bottom:4px">
+    RECENT DETECTIONS
+  </div>
+  <div id="det-list"></div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+// ── State ──
+let raceStart = null;
+let clockInterval = null;
+let approachCount = 0;
+let matchCount = 0;
+let captureInProgress = false;
+let approachInterval = null;
+let recentApproachBibs = new Set(); // Avoid duplicate approach broadcasts
+
+const video = document.getElementById('video');
+const workCanvas = document.getElementById('work-canvas');
+const workCtx = workCanvas.getContext('2d');
+
+// ── Camera ──
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      },
+      audio: false,
+    });
+    video.srcObject = stream;
+    video.addEventListener('loadedmetadata', () => {
+      workCanvas.width = video.videoWidth;
+      workCanvas.height = video.videoHeight;
+    });
+  } catch (err) {
+    notify('Camera Error', err.message);
+  }
+}
+
+// ── Depth estimation from bib bounding box ──
+function estimateDepthFromBbox(bboxWidth) {
+  if (!bboxWidth || bboxWidth < 10) return 0;
+  const FOCAL_PX = 1400;
+  const BIB_REAL_MM = 240;
+  return Math.round((BIB_REAL_MM * FOCAL_PX) / bboxWidth);
+}
+
+function updateDepthDisplay(mm) {
+  const el = document.getElementById('depth-value');
+  if (mm <= 0) { el.textContent = '— mm'; el.style.color = 'var(--muted)'; }
+  else if (mm < 1000) { el.textContent = `${mm} mm`; el.style.color = 'var(--green)'; }
+  else { el.textContent = `${(mm / 1000).toFixed(2)} m`; el.style.color = mm > 1500 ? 'var(--orange)' : 'var(--green)'; }
+  return mm;
+}
+
+// ── MODE 1: Approach Detection (continuous, feeds announcer) ──
+async function approachScan() {
+  if (captureInProgress || !raceStart) return;
+
+  const modeEl = document.getElementById('mode-approach');
+  modeEl.classList.add('active');
+
+  workCtx.drawImage(video, 0, 0);
+  const blob = await new Promise(r => workCanvas.toBlob(r, 'image/jpeg', 0.7));
+  if (!blob) { modeEl.classList.remove('active'); return; }
+
+  const fd = new FormData();
+  fd.append('photo', blob, `approach_${Date.now()}.jpg`);
+
+  try {
+    const det = await api('POST', '/detect/approach', fd);
+
+    if (det.bib) {
+      approachCount++;
+      document.getElementById('approach-count').textContent = approachCount;
+
+      // Show bbox
+      if (det.bbox && det.bbox.length === 4) {
+        showBbox(det.bbox, det.bib, det.confidence);
+        const bboxWidth = det.bbox[2] - det.bbox[0];
+        updateDepthDisplay(estimateDepthFromBbox(bboxWidth));
+      }
+
+      addDetRow(det.bib, det.confidence, null, 'approach', det.method);
+
+      // Track to avoid re-broadcasting same bib too fast
+      if (!recentApproachBibs.has(det.bib)) {
+        recentApproachBibs.add(det.bib);
+        setTimeout(() => recentApproachBibs.delete(det.bib), 10000);
+      }
+    }
+  } catch {}
+
+  modeEl.classList.remove('active');
+}
+
+function startApproachScanning() {
+  if (approachInterval) return;
+  approachInterval = setInterval(approachScan, 2000); // Every 2 seconds
+}
+
+function stopApproachScanning() {
+  if (approachInterval) { clearInterval(approachInterval); approachInterval = null; }
+}
+
+// ── MODE 2: Finish Capture (triggered by side-view crossing) ──
+async function finishCapture(crossingId) {
+  if (captureInProgress) return;
+  captureInProgress = true;
+
+  const modeEl = document.getElementById('mode-finish');
+  modeEl.classList.add('active');
+
+  // Flash capture indicator
+  const dot = document.getElementById('capture-dot');
+  dot.classList.add('active');
+  setTimeout(() => dot.classList.remove('active'), 300);
+
+  workCtx.drawImage(video, 0, 0);
+  const blob = await new Promise(r => workCanvas.toBlob(r, 'image/jpeg', 0.92));
+  if (!blob) { captureInProgress = false; modeEl.classList.remove('active'); return; }
+
+  // Step 1: Detect bib via visual fingerprinting
+  const detectFd = new FormData();
+  detectFd.append('photo', blob, `finish_${Date.now()}.jpg`);
+
+  try {
+    const det = await api('POST', '/detect', detectFd);
+
+    if (det.bbox && det.bbox.length === 4) {
+      showBbox(det.bbox, det.bib, det.confidence);
+      const bboxWidth = det.bbox[2] - det.bbox[0];
+      updateDepthDisplay(estimateDepthFromBbox(bboxWidth));
+    }
+
+    if (!det.bib) {
+      addDetRow(null, 0, crossingId, 'no bib', det.method);
+      captureInProgress = false;
+      modeEl.classList.remove('active');
+      return;
+    }
+
+    // Step 2: Match to crossing
+    const matchFd = new FormData();
+    matchFd.append('crossing_id', crossingId || 0);
+    matchFd.append('bib_number', det.bib);
+    matchFd.append('confidence', det.confidence);
+    matchFd.append('depth_mm', updateDepthDisplay(estimateDepthFromBbox(
+      det.bbox ? det.bbox[2] - det.bbox[0] : 0
+    )));
+    matchFd.append('photo', blob, `finish_${det.bib}_${Date.now()}.jpg`);
+
+    try {
+      const match = await api('POST', '/timing/match', matchFd);
+      matchCount++;
+      document.getElementById('match-count').textContent = matchCount;
+      addDetRow(det.bib, det.confidence, crossingId, 'matched', det.method);
+      ChimeEngine.playFinishChime();
+      notify('Match!', `Bib ${det.bib} at ${match.elapsed}`, 'var(--green)');
+    } catch (matchErr) {
+      addDetRow(det.bib, det.confidence, crossingId, 'no crossing', det.method);
+      ChimeEngine.playWarning();
+    }
+  } catch (err) {
+    addDetRow(null, 0, crossingId, 'error');
+    console.error('Detection error:', err);
+  }
+
+  captureInProgress = false;
+  modeEl.classList.remove('active');
+}
+
+function showBbox(bbox, bib, conf) {
+  const overlay = document.getElementById('det-overlay');
+  const scaleX = video.clientWidth / workCanvas.width;
+  const scaleY = video.clientHeight / workCanvas.height;
+  const x = bbox[0] * scaleX, y = bbox[1] * scaleY;
+  const w = (bbox[2] - bbox[0]) * scaleX, h = (bbox[3] - bbox[1]) * scaleY;
+  overlay.innerHTML = `
+    <div class="bbox" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">
+      <div class="bbox-label">#${bib} ${(conf * 100).toFixed(0)}%</div>
+    </div>`;
+  setTimeout(() => { overlay.innerHTML = ''; }, 2000);
+}
+
+function addDetRow(bib, conf, crossingId, status, method) {
+  const list = document.getElementById('det-list');
+  const now = new Date().toLocaleTimeString('en-US', { hour12: false, fractionalSecondDigits: 1 });
+  const statusCls = status === 'matched' ? 'det-matched' : status === 'approach' ? 'det-approach' : 'det-sent';
+  const row = document.createElement('div');
+  row.className = 'det-row';
+  row.innerHTML = `
+    <span class="det-bib">${bib ? '#' + bib : '—'}</span>
+    <span class="det-conf">${conf ? (conf * 100).toFixed(0) + '%' : '—'}</span>
+    <span class="det-time">${now}</span>
+    <span class="det-method">${method || ''}</span>
+    ${crossingId ? `<span style="font-size:0.55rem;color:var(--muted)">cx#${crossingId}</span>` : ''}
+    <span class="det-status ${statusCls}">${status}</span>`;
+  list.insertBefore(row, list.firstChild);
+  while (list.children.length > 25) list.removeChild(list.lastChild);
+}
+
+// ── Clock ──
+function tickClock() {
+  if (!raceStart) return;
+  document.getElementById('clock').textContent = fmtElapsed((Date.now() / 1000) - raceStart);
+}
+
+function setNetStatus(ok) {
+  document.getElementById('net-dot').className = ok ? 'dot dot-green' : 'dot dot-red';
+}
+
+// ── WebSocket ──
+connectWS((msg) => {
+  setNetStatus(true);
+
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    startApproachScanning();
+  }
+
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('clock').textContent = '0:00.000';
+    approachCount = 0; matchCount = 0;
+    document.getElementById('approach-count').textContent = '0';
+    document.getElementById('match-count').textContent = '0';
+    document.getElementById('det-list').innerHTML = '';
+    recentApproachBibs.clear();
+    stopApproachScanning();
+  }
+
+  if (msg.type === 'crossing_detected') {
+    // Side-view triggered! Capture bib NOW
+    const alert = document.getElementById('crossing-alert');
+    alert.classList.remove('show');
+    void alert.offsetWidth;
+    alert.classList.add('show');
+    ChimeEngine.playPing();
+    finishCapture(msg.crossing_id);
+  }
+});
+
+// ── Init ──
+(async () => {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+      startApproachScanning();
+    }
+    setNetStatus(true);
+  } catch { setNetStatus(false); }
+
+  await startCamera();
+})();
+</script>
+</body>
+</html>

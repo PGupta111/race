@@ -3,85 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Live Results · Big Red</title>
+  <title>Live Results · Big Red Command Center</title>
+  <meta name="description" content="Real-time race results with live WebSocket updates and category breakdowns.">
   <link rel="stylesheet" href="/static/styles.css">
   <style>
-    .results-header {
-      text-align: center;
-      padding: 32px 0 16px;
+    .photo-thumb {
+      width: 44px; height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer;
+      transition: transform 0.15s;
     }
-    .results-title {
-      font-size: 2rem;
-      font-weight: 900;
-      color: var(--red);
-      letter-spacing: 2px;
-    }
-    .results-subtitle { color: var(--muted); font-size: .9rem; margin-top: 6px; }
-    .live-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(0,200,81,.1);
-      border: 1px solid var(--green);
-      border-radius: 20px;
-      padding: 4px 14px;
-      font-size: .8rem;
-      color: var(--green);
-      margin-top: 10px;
-    }
-    .trophy { font-size: 1.4rem; }
-    .rank-num {
-      font-size: 1.2rem;
-      font-weight: 900;
-      font-variant-numeric: tabular-nums;
-      min-width: 36px;
-      text-align: center;
-    }
-    .finish-time {
-      font-family: 'Courier New', monospace;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--green);
-    }
-    .cat-section { margin-bottom: 32px; }
-    .cat-section-title {
-      font-size: 1rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      padding: 10px 14px;
-      border-left: 4px solid var(--red);
-      margin-bottom: 0;
-    }
-    .all-done {
-      text-align: center;
-      padding: 60px 0;
-      color: var(--muted);
-    }
-    .podium-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-    .podium-card {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px;
-      text-align: center;
-    }
-    .podium-rank   { font-size: 2rem; font-weight: 900; }
-    .podium-bib    { font-size: 2.5rem; font-weight: 900; color: var(--red); font-variant-numeric: tabular-nums; }
-    .podium-name   { font-size: .95rem; margin-top: 6px; }
-    .podium-time   { font-size: 1.1rem; font-weight: 700; color: var(--green); margin-top: 4px; font-family: monospace; }
-    .podium-card.gold   { border-color: var(--gold);   }
-    .podium-card.silver { border-color: var(--silver); }
-    .podium-card.bronze { border-color: var(--bronze); }
-
-    @media (max-width: 600px) {
-      .podium-row { grid-template-columns: 1fr; }
-    }
+    .photo-thumb:hover { transform: scale(1.8); z-index: 10; position: relative; }
+    .no-photo { width: 44px; height: 44px; border-radius: 6px; background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -97,6 +32,9 @@
     <a href="/checkin">Check-In</a>
     <a href="/var">VAR</a>
     <a href="/results" class="active">Results</a>
+    <a href="/announcer">Announcer</a>
+    <a href="/livestream">📺 Live</a>
+    <a href="/phone/calibrate">📱 Phones</a>
   </nav>
 </header>
 
@@ -112,30 +50,33 @@
   </div>
 
   <!-- Category tabs -->
-  <div class="cat-tabs">
-    <button class="tab-btn active" onclick="setTab('all', this)">All</button>
-    <button class="tab-btn" onclick="setTab('Students', this)">🎓 Students</button>
-    <button class="tab-btn" onclick="setTab('Alumni', this)">🏛 Alumni</button>
-    <button class="tab-btn" onclick="setTab('Parents', this)">👨‍👩‍👧 Parents</button>
+  <div class="flex items-center justify-between" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div class="cat-tabs" style="margin-bottom:0">
+      <button class="tab-btn active" onclick="setTab('all', this)">All</button>
+      <button class="tab-btn" onclick="setTab('Students', this)">🎓 Students</button>
+      <button class="tab-btn" onclick="setTab('Alumni', this)">🏛 Alumni</button>
+      <button class="tab-btn" onclick="setTab('Parents', this)">👪 Parents</button>
+    </div>
+    <button class="btn btn-gray" id="btn-export" style="font-size:.82rem">📊 Export CSV</button>
   </div>
 
-  <!-- Overall stats strip -->
-  <div class="grid-4 mb-0" style="margin-bottom:24px">
-    <div class="card">
+  <!-- Stats strip -->
+  <div class="grid-4" style="margin-bottom:24px">
+    <div class="card" style="animation-delay:0.05s">
       <div class="card-title">Finishers</div>
       <div class="metric green" id="s-finished">—</div>
     </div>
-    <div class="card">
+    <div class="card" style="animation-delay:0.1s">
       <div class="card-title">Students</div>
       <div class="metric blue" id="s-students">—</div>
     </div>
-    <div class="card">
+    <div class="card" style="animation-delay:0.15s">
       <div class="card-title">Alumni</div>
-      <div class="metric" style="color:#a5d6a7" id="s-alumni">—</div>
+      <div class="metric" style="color:var(--green)" id="s-alumni">—</div>
     </div>
-    <div class="card">
+    <div class="card" style="animation-delay:0.2s">
       <div class="card-title">Parents</div>
-      <div class="metric" style="color:#ce93d8" id="s-parents">—</div>
+      <div class="metric purple" id="s-parents">—</div>
     </div>
   </div>
 
@@ -175,11 +116,11 @@ function podiumHTML(runner) {
   const cls = classes[runner.rank - 1] || '';
   const trophy = trophies[runner.rank - 1] || `#${runner.rank}`;
   return `
-    <div class="podium-card ${cls}">
+    <div class="podium-card ${cls}" style="animation-delay:${(runner.rank - 1) * 0.1}s">
       <div class="podium-rank">${trophy}</div>
       <div class="podium-bib">${runner.bib_number}</div>
       <div class="podium-name">${runner.name}</div>
-      <div>${catBadge(runner.category)}</div>
+      <div style="margin-top:4px">${catBadge(runner.category)}</div>
       <div class="podium-time">${runner.finish_time}</div>
     </div>`;
 }
@@ -194,19 +135,21 @@ function categoryTableHTML(title, runners) {
       <div class="cat-section-title">${title}</div>
       ${podium.length ? `<div class="podium-row mt-16">${podium.map(podiumHTML).join('')}</div>` : ''}
       ${rest.length ? `
-        <div class="card" style="padding:0">
+        <div class="card" style="padding:0;margin-top:0">
           <table>
             <thead>
-              <tr><th>Rank</th><th>Bib</th><th>Name</th><th>Category</th><th>Finish Time</th></tr>
+              <tr><th>Rank</th><th>Bib</th><th>Bib Photo</th><th>Name</th><th>Category</th><th>Finish Time</th><th>Finish Photo</th></tr>
             </thead>
             <tbody>
               ${rest.map(r => `
                 <tr>
                   <td class="rank-num">#${r.rank}</td>
                   <td class="bold mono">${r.bib_number}</td>
+                  <td>${r.bib_photo ? `<img src="${r.bib_photo}" class="photo-thumb" alt="Bib">` : '<div class="no-photo">—</div>'}</td>
                   <td>${r.name}</td>
                   <td>${catBadge(r.category)}</td>
                   <td class="finish-time">${r.finish_time}</td>
+                  <td>${r.photo_path ? `<img src="${r.photo_path}" class="photo-thumb" alt="Finish">` : '<div class="no-photo">—</div>'}</td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -225,16 +168,16 @@ function renderContent() {
       anyData = true;
       const label = key === 'all' ? '🏁 Overall Standings' :
         key === 'Students' ? '🎓 Students' :
-        key === 'Alumni' ? '🏛 Alumni' : '👨‍👩‍👧 Parents';
+        key === 'Alumni' ? '🏛 Alumni' : '👪 Parents';
       html += categoryTableHTML(label, runners);
     }
   }
 
   if (!anyData) {
     html = `<div class="all-done">
-      <div style="font-size:3rem">🏁</div>
+      <div style="font-size:4rem;opacity:0.3">🏁</div>
       <div class="section-title mt-8">No finishers yet</div>
-      <div>Results will appear here as runners cross the finish line.</div>
+      <div style="color:var(--muted)">Results will appear here as runners cross the finish line.</div>
     </div>`;
   }
 
@@ -246,12 +189,11 @@ async function loadResults() {
     const all = await api('GET', '/results/all');
     allResults = all;
 
-    // Stats
     const total = all.Students.length + all.Alumni.length + all.Parents.length;
-    document.getElementById('s-finished').textContent = total;
-    document.getElementById('s-students').textContent = all.Students.length;
-    document.getElementById('s-alumni').textContent   = all.Alumni.length;
-    document.getElementById('s-parents').textContent  = all.Parents.length;
+    animateNumber(document.getElementById('s-finished'), total);
+    animateNumber(document.getElementById('s-students'), all.Students.length);
+    animateNumber(document.getElementById('s-alumni'), all.Alumni.length);
+    animateNumber(document.getElementById('s-parents'), all.Parents.length);
 
     renderContent();
   } catch (err) { console.error(err); }
@@ -267,14 +209,37 @@ async function loadClock() {
   } catch {}
 }
 
-// ── WebSocket ──
+// Export CSV
+document.getElementById('btn-export').addEventListener('click', () => {
+  const data = getDisplayData();
+  const rows = [];
+  for (const [key, runners] of Object.entries(data)) {
+    runners.forEach(r => rows.push({
+      Rank: r.rank,
+      Bib: r.bib_number,
+      Name: r.name,
+      Category: r.category,
+      'Finish Time': r.finish_time,
+      'Elapsed (s)': r.elapsed_s,
+      Status: r.status
+    }));
+  }
+  if (rows.length) {
+    downloadCSV(rows, `big_red_results_${currentTab}_${Date.now()}.csv`);
+    notify('Export', `${rows.length} results exported to CSV`, 'var(--green)');
+  } else {
+    notify('Export', 'No results to export.', 'var(--orange)');
+  }
+});
+
+// WebSocket
 connectWS((msg) => {
   if (['var_accepted','var_overridden','race_started'].includes(msg.type)) {
     loadResults();
   }
 });
 
-// ── Init ──
+// Init
 loadResults();
 loadClock();
 setInterval(loadResults, 5000);

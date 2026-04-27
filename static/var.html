@@ -3,38 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>VAR Dashboard · Big Red</title>
+  <title>VAR Dashboard · Big Red Command Center</title>
+  <meta name="description" content="Video Assistant Referee — human-in-the-loop finish verification.">
   <link rel="stylesheet" href="/static/styles.css">
-  <style>
-    .queue-strip {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 8px;
-      margin-bottom: 16px;
-    }
-    .queue-chip {
-      flex-shrink: 0;
-      padding: 6px 16px;
-      border: 2px solid var(--border);
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: .85rem;
-      font-weight: 600;
-      background: var(--surface2);
-      transition: all .2s;
-    }
-    .queue-chip.selected  { border-color: var(--red); color: var(--red); }
-    .queue-chip.depth-bad { border-color: var(--orange); }
-    .empty-var {
-      text-align: center;
-      padding: 80px 0;
-      color: var(--muted);
-    }
-    .empty-var .icon { font-size: 4rem; }
-    .override-form { display: none; }
-    .override-form.visible { display: block; }
-  </style>
 </head>
 <body>
 
@@ -49,13 +20,14 @@
     <a href="/checkin">Check-In</a>
     <a href="/var" class="active">VAR</a>
     <a href="/results">Results</a>
+    <a href="/announcer">Announcer</a>
   </nav>
 </header>
 
 <div class="container">
 
-  <!-- Pending queue strip -->
-  <div class="card" style="padding:14px 20px">
+  <!-- Pending Queue Strip -->
+  <div class="card" style="padding:14px 22px">
     <div class="flex items-center justify-between" style="margin-bottom:10px">
       <div class="card-title" style="margin-bottom:0">Pending Review Queue</div>
       <div>
@@ -67,7 +39,7 @@
     </div>
   </div>
 
-  <!-- Main VAR panel -->
+  <!-- Empty state -->
   <div id="var-empty" class="card mt-16">
     <div class="empty-var">
       <div class="icon">✅</div>
@@ -76,6 +48,7 @@
     </div>
   </div>
 
+  <!-- Main VAR panel -->
   <div id="var-panel" class="mt-16" style="display:none">
 
     <!-- Side-by-side images -->
@@ -85,7 +58,7 @@
         <div class="var-image-area" id="master-img-wrap">
           <div class="var-placeholder">
             <div class="var-bib-overlay" id="master-bib-big">—</div>
-            <div style="font-size:.8rem;margin-top:8px">No check-in photo</div>
+            <div style="font-size:.78rem;margin-top:8px">No check-in photo</div>
           </div>
         </div>
       </div>
@@ -94,7 +67,7 @@
         <div class="var-image-area" id="finish-img-wrap">
           <div class="var-placeholder">
             <div class="var-bib-overlay" id="finish-bib-big">—</div>
-            <div style="font-size:.8rem;margin-top:8px">Simulated finish crop</div>
+            <div style="font-size:.78rem;margin-top:8px">Simulated finish crop</div>
           </div>
         </div>
       </div>
@@ -105,11 +78,11 @@
       <div class="var-info-row">
         <div class="var-info-block">
           <div class="var-info-label">Detected Bib</div>
-          <div class="var-info-value red" id="info-bib">—</div>
+          <div class="var-info-value" style="color:var(--red)" id="info-bib">—</div>
         </div>
         <div class="var-info-block">
           <div class="var-info-label">Finish Time</div>
-          <div class="var-info-value green mono" id="info-time">—</div>
+          <div class="var-info-value mono" style="color:var(--green)" id="info-time">—</div>
         </div>
         <div class="var-info-block">
           <div class="var-info-label">Runner</div>
@@ -121,10 +94,10 @@
       <div class="flex items-center gap-12 mt-8">
         <div style="min-width:120px">
           <div class="var-info-label">IR Depth Reading</div>
-          <div class="bold" id="depth-value">— mm</div>
+          <div class="bold" id="depth-value" style="margin-top:4px">— mm</div>
         </div>
         <div style="flex:1">
-          <div class="flex justify-between" style="font-size:.72rem;color:var(--muted);margin-bottom:4px">
+          <div class="flex justify-between" style="font-size:.68rem;color:var(--muted);margin-bottom:4px;font-weight:500">
             <span>0 m</span>
             <span id="depth-label">—</span>
             <span>2 m</span>
@@ -165,7 +138,7 @@
           <div class="form-group">
             <label>Correct Bib Number</label>
             <input id="override-bib" type="text" placeholder="e.g. 103"
-              style="font-size:1.5rem;letter-spacing:3px;text-align:center">
+              style="font-size:1.5rem;letter-spacing:3px;text-align:center;font-family:'JetBrains Mono',monospace">
           </div>
           <div class="form-group">
             <label>Notes (optional)</label>
@@ -251,7 +224,7 @@ function showEvent(idx) {
   } else {
     masterWrap.innerHTML = `<div class="var-placeholder">
       <div class="var-bib-overlay">${e.bib_number}</div>
-      <div style="font-size:.8rem;margin-top:8px">No check-in photo</div>
+      <div style="font-size:.78rem;margin-top:8px">No check-in photo</div>
     </div>`;
   }
 
@@ -262,7 +235,7 @@ function showEvent(idx) {
   } else {
     finishWrap.innerHTML = `<div class="var-placeholder">
       <div class="var-bib-overlay">${e.detected_bib || e.bib_number}</div>
-      <div style="font-size:.8rem;margin-top:8px">Simulated finish crop</div>
+      <div style="font-size:.78rem;margin-top:8px">Simulated finish crop</div>
     </div>`;
   }
 
@@ -290,22 +263,22 @@ function showEvent(idx) {
     statusEl.className   = 'badge badge-pending';
   }
 
-  // Reset override form
   closeOverride();
 }
 
-// ── Accept ──
+// Accept
 async function doAccept() {
   if (!queue[currentIdx]) return;
   const e = queue[currentIdx];
   try {
     await api('POST', `/var/${e.id}/accept`);
     notify('VAR — Accepted', `Bib ${e.bib_number} confirmed ✓`, 'var(--green)');
+    ChimeEngine.playPing();
     await loadQueue();
   } catch (err) { notify('Error', err.message); }
 }
 
-// ── Override ──
+// Override
 function openOverride() {
   document.getElementById('override-form').classList.add('visible');
   document.getElementById('override-bib').focus();
@@ -328,11 +301,12 @@ async function doOverride() {
   try {
     await api('POST', `/var/${e.id}/override`, fd);
     notify('VAR — Override', `Bib corrected: ${e.bib_number} → ${bib}`, 'var(--orange)');
+    ChimeEngine.playPing();
     await loadQueue();
   } catch (err) { notify('Error', err.message); }
 }
 
-// ── Reject ──
+// Reject
 async function doReject() {
   const e = queue[currentIdx];
   if (!e) return;
@@ -341,20 +315,20 @@ async function doReject() {
   try {
     await api('POST', `/var/${e.id}/reject`, fd);
     notify('VAR — Rejected', `Event for bib ${e.bib_number} rejected`, 'var(--red)');
+    ChimeEngine.playWarning();
     await loadQueue();
   } catch (err) { notify('Error', err.message); }
 }
 
-// ── Button bindings ──
+// Button bindings
 document.getElementById('btn-accept').addEventListener('click', doAccept);
 document.getElementById('btn-override-open').addEventListener('click', openOverride);
 document.getElementById('btn-override-confirm').addEventListener('click', doOverride);
 document.getElementById('btn-override-cancel').addEventListener('click', closeOverride);
 document.getElementById('btn-reject').addEventListener('click', doReject);
 
-// ── Keyboard shortcuts ──
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-  // Don't trigger when typing in an input
   if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
 
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doAccept(); }
@@ -371,14 +345,18 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeOverride();
 });
 
-// ── WebSocket ──
+// WebSocket
 connectWS((msg) => {
-  if (['finish_detected','var_accepted','var_overridden','var_rejected'].includes(msg.type)) {
+  if (msg.type === 'finish_detected') {
+    ChimeEngine.playFinishChime();
+    loadQueue();
+  }
+  if (['var_accepted','var_overridden','var_rejected'].includes(msg.type)) {
     loadQueue();
   }
 });
 
-// ── Init ──
+// Init
 getRaceStart().then(loadQueue);
 setInterval(loadQueue, 8000);
 </script>

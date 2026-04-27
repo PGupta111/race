@@ -7,6 +7,7 @@ millisecond-accurate finish timestamps.
 DepthChecker gates bib processing: only accepted when depth ≤ threshold.
 """
 import time
+from typing import Optional
 
 FINISH_DEPTH_THRESHOLD_MM = 1000.0  # 1 metre
 
@@ -15,13 +16,13 @@ class LineScanTimer:
     """Monotonic high-resolution clock anchored to race start."""
 
     def __init__(self):
-        self._race_start: float | None = None
+        self._race_start: Optional[float] = None
 
     @property
-    def race_start(self) -> float | None:
+    def race_start(self) -> Optional[float]:
         return self._race_start
 
-    def start(self, ts: float | None = None) -> float:
+    def start(self, ts: Optional[float] = None) -> float:
         self._race_start = ts if ts is not None else time.time()
         return self._race_start
 

@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>SIDE-VIEW · Line Scanner</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; touch-action: manipulation; }
+    body { display: flex; flex-direction: column; }
+
+    .side-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 16px;
+      background: rgba(0,0,0,0.6);
+      border-bottom: 1px solid rgba(230,57,70,0.2);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .side-title {
+      font-size: 0.6rem; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--text-secondary);
+    }
+
+    .side-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem; font-weight: 700; color: var(--green);
+    }
+
+    .side-stats {
+      display: flex; gap: 8px; font-size: 0.6rem; font-weight: 600;
+    }
+
+    .side-stats span { display: flex; align-items: center; gap: 4px; }
+
+    /* ── Camera area ── */
+    .camera-area {
+      position: relative;
+      height: 35%;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #video { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Scan line overlay */
+    .scan-line {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 3px;
+      background: var(--red);
+      box-shadow: 0 0 12px rgba(230,57,70,0.8), 0 0 30px rgba(230,57,70,0.3);
+      z-index: 5;
+      left: 50%;
+      pointer-events: none;
+    }
+
+    .scan-line-label {
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--red);
+      color: white;
+      font-size: 0.55rem;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+      z-index: 6;
+    }
+
+    /* ── Ribbon area (scrollable SprintTimer-style) ── */
+    .ribbon-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #0a0a0f;
+      border-top: 1px solid rgba(230,57,70,0.15);
+    }
+
+    .ribbon-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 12px;
+      background: rgba(0,0,0,0.5);
+      flex-shrink: 0;
+    }
+
+    .ribbon-label {
+      font-size: 0.55rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted);
+    }
+
+    .ribbon-scroll-area {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: hidden;
+      position: relative;
+      cursor: grab;
+    }
+
+    .ribbon-scroll-area:active { cursor: grabbing; }
+
+    .ribbon-wrapper {
+      position: relative;
+      height: 100%;
+      min-width: 100%;
+    }
+
+    #ribbon-canvas {
+      height: 100%;
+      image-rendering: pixelated;
+    }
+
+    /* Time markers on the ribbon */
+    .time-marker {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: rgba(255,255,255,0.2);
+      z-index: 2;
+    }
+
+    .time-marker-label {
+      position: absolute;
+      top: 2px;
+      left: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.5rem;
+      color: rgba(255,255,255,0.5);
+      white-space: nowrap;
+    }
+
+    /* Crossing markers on the ribbon */
+    .crossing-marker {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 2px;
+      background: var(--red);
+      box-shadow: 0 0 6px rgba(230,57,70,0.6);
+      z-index: 3;
+      cursor: pointer;
+    }
+
+    .crossing-marker-label {
+      position: absolute;
+      bottom: 4px;
+      left: 6px;
+      background: var(--red);
+      color: white;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+
+    /* Scrubber (time cursor) */
+    .scrubber {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 2px;
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(0,214,143,0.5);
+      z-index: 5;
+      pointer-events: none;
+      display: none;
+    }
+
+    .scrubber-time {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--green);
+      color: #000;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px;
+      background: rgba(0,0,0,0.7);
+      border-top: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
+    }
+
+    .arm-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+
+    .arm-btn.armed {
+      background: var(--red);
+      color: white;
+      animation: armedPulse 2s ease-in-out infinite;
+    }
+
+    .arm-btn.disarmed {
+      background: rgba(255,255,255,0.08);
+      color: var(--text-secondary);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    @keyframes armedPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(230,57,70,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(230,57,70,0); }
+    }
+
+    .sensitivity-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sensitivity-label {
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    .sensitivity-slider {
+      width: 100%;
+      accent-color: var(--red);
+    }
+
+    .save-btn {
+      padding: 10px 16px;
+      background: rgba(59,130,246,0.15);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 8px;
+      color: var(--blue);
+      font-size: 0.7rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ── Crossing flash ── */
+    .crossing-flash {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(230,57,70,0.15);
+      pointer-events: none;
+      z-index: 20;
+      opacity: 0;
+    }
+
+    .crossing-flash.show {
+      animation: crossFlash 0.3s ease both;
+    }
+
+    @keyframes crossFlash {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="side-header">
+  <div>
+    <div class="side-title">📹 Side-View · SprintTimer Line Scanner</div>
+  </div>
+  <div class="side-stats">
+    <span style="color:var(--red)"><span id="crossing-count">0</span> crossings</span>
+    <span><div class="dot" id="net-dot"></div></span>
+  </div>
+  <div class="side-clock" id="clock">0:00.000</div>
+</div>
+
+<div class="camera-area" id="camera-area">
+  <video id="video" autoplay playsinline muted></video>
+  <div class="scan-line" id="scan-line"></div>
+  <div class="scan-line-label">SCAN LINE</div>
+  <div class="crossing-flash" id="crossing-flash"></div>
+</div>
+
+<div class="ribbon-section">
+  <div class="ribbon-toolbar">
+    <span class="ribbon-label">RIBBON · Scroll to read times</span>
+    <span class="ribbon-label" id="ribbon-info">0 px</span>
+  </div>
+  <div class="ribbon-scroll-area" id="ribbon-scroll">
+    <div class="ribbon-wrapper" id="ribbon-wrapper">
+      <canvas id="ribbon-canvas"></canvas>
+      <div class="scrubber" id="scrubber">
+        <div class="scrubber-time" id="scrubber-time">0:00.000</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button class="arm-btn disarmed" id="arm-btn" onclick="toggleArm()">
+    ⏸ DISARMED
+  </button>
+  <div class="sensitivity-group">
+    <span class="sensitivity-label">Sensitivity: <span id="sens-val">30</span></span>
+    <input type="range" class="sensitivity-slider" id="sensitivity" min="5" max="80" value="30">
+  </div>
+  <button class="save-btn" onclick="saveRibbon()">💾 Save</button>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+// ── Config ──
+const RIBBON_HEIGHT = 300;       // Pixels tall for the ribbon canvas
+const PIXELS_PER_SEC = 60;       // Ribbon scroll speed: 60 columns per second
+const COOLDOWN_MS = 500;         // Minimum ms between crossings
+
+// ── State ──
+let raceStart = null;
+let clockInterval = null;
+let armed = false;
+let sensitivity = 30;
+let crossingCount = 0;
+let lastCrossingTime = 0;
+let ribbonOffset = 0;            // Current column being written in the ribbon
+let prevColumnData = null;
+let scanning = false;
+
+const video = document.getElementById('video');
+const ribbonCanvas = document.getElementById('ribbon-canvas');
+const ribbonCtx = ribbonCanvas.getContext('2d');
+const workCanvas = document.createElement('canvas');
+const workCtx = workCanvas.getContext('2d');
+
+// ── Camera ──
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      },
+      audio: false,
+    });
+    video.srcObject = stream;
+    video.addEventListener('loadedmetadata', () => {
+      workCanvas.width = video.videoWidth;
+      workCanvas.height = video.videoHeight;
+      ribbonCanvas.height = RIBBON_HEIGHT;
+      ribbonCanvas.width = 1; // Grows dynamically
+    });
+  } catch (err) {
+    notify('Camera Error', err.message);
+  }
+}
+
+// ── Ribbon: extract 1px column per frame ──
+function extractColumn() {
+  if (!video.videoWidth) return null;
+
+  workCtx.drawImage(video, 0, 0);
+
+  // Extract the center column (matching the scan line position)
+  const cx = Math.floor(video.videoWidth / 2);
+  const colData = workCtx.getImageData(cx, 0, 1, video.videoHeight);
+  return colData;
+}
+
+function appendToRibbon(colData) {
+  if (!colData) return;
+
+  // Grow canvas width
+  const newWidth = ribbonOffset + 1;
+  if (newWidth > ribbonCanvas.width) {
+    // Save existing data
+    const existing = ribbonCtx.getImageData(0, 0, ribbonCanvas.width, ribbonCanvas.height);
+    ribbonCanvas.width = Math.max(newWidth, ribbonCanvas.width + 120);
+    ribbonCtx.putImageData(existing, 0, 0);
+  }
+
+  // Scale the column to fit ribbon height
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = 1;
+  tempCanvas.height = colData.height;
+  tempCanvas.getContext('2d').putImageData(colData, 0, 0);
+
+  ribbonCtx.drawImage(tempCanvas, 0, 0, 1, colData.height, ribbonOffset, 0, 1, RIBBON_HEIGHT);
+
+  ribbonOffset++;
+
+  // Update ribbon wrapper width to enable scrolling
+  document.getElementById('ribbon-wrapper').style.width = ribbonOffset + 'px';
+  document.getElementById('ribbon-info').textContent = ribbonOffset + ' px';
+
+  // Auto-scroll to the right edge
+  const scrollArea = document.getElementById('ribbon-scroll');
+  scrollArea.scrollLeft = ribbonOffset - scrollArea.clientWidth + 20;
+}
+
+// ── Motion detection on the scan column ──
+function detectCrossing(colData) {
+  if (!prevColumnData || !colData) {
+    prevColumnData = colData;
+    return false;
+  }
+
+  const cur = colData.data;
+  const prev = prevColumnData.data;
+  const len = Math.min(cur.length, prev.length);
+  let totalDiff = 0;
+  const step = 4; // RGBA
+
+  for (let i = 0; i < len; i += step * 3) { // Sample every 3rd pixel for speed
+    const dr = Math.abs(cur[i] - prev[i]);
+    const dg = Math.abs(cur[i + 1] - prev[i + 1]);
+    const db = Math.abs(cur[i + 2] - prev[i + 2]);
+    totalDiff += (dr + dg + db) / 3;
+  }
+
+  const numSamples = Math.floor(len / (step * 3));
+  const avgDiff = totalDiff / Math.max(numSamples, 1);
+
+  prevColumnData = colData;
+  return avgDiff > sensitivity;
+}
+
+// ── Main scan loop ──
+function scanLoop() {
+  if (!scanning) return;
+
+  const col = extractColumn();
+
+  if (raceStart && armed) {
+    appendToRibbon(col);
+    addTimeMarkers();
+
+    if (detectCrossing(col)) {
+      const now = Date.now();
+      if (now - lastCrossingTime > COOLDOWN_MS) {
+        lastCrossingTime = now;
+        triggerCrossing();
+      }
+    }
+  }
+
+  requestAnimationFrame(scanLoop);
+}
+
+// ── Time markers on the ribbon ──
+let lastMarkerSec = -1;
+
+function addTimeMarkers() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  const sec = Math.floor(elapsed);
+
+  if (sec > lastMarkerSec) {
+    lastMarkerSec = sec;
+
+    const wrapper = document.getElementById('ribbon-wrapper');
+    const marker = document.createElement('div');
+    marker.className = 'time-marker';
+    marker.style.left = ribbonOffset + 'px';
+
+    // Show label every 5 seconds
+    if (sec % 5 === 0) {
+      const mins = Math.floor(sec / 60);
+      const secs = sec % 60;
+      marker.innerHTML = `<div class="time-marker-label">${mins}:${String(secs).padStart(2,'0')}</div>`;
+    }
+
+    wrapper.appendChild(marker);
+  }
+}
+
+// ── Crossing trigger ──
+async function triggerCrossing() {
+  crossingCount++;
+  document.getElementById('crossing-count').textContent = crossingCount;
+
+  // Flash
+  const flash = document.getElementById('crossing-flash');
+  flash.classList.remove('show');
+  void flash.offsetWidth;
+  flash.classList.add('show');
+
+  // Haptic
+  if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+
+  ChimeEngine.playPing();
+
+  // Add crossing marker on ribbon
+  const wrapper = document.getElementById('ribbon-wrapper');
+  const marker = document.createElement('div');
+  marker.className = 'crossing-marker';
+  marker.style.left = ribbonOffset + 'px';
+
+  const elapsed = raceStart ? (Date.now() / 1000) - raceStart : 0;
+  const timeStr = fmtElapsed(elapsed);
+  marker.innerHTML = `<div class="crossing-marker-label">#${crossingCount} ${timeStr}</div>`;
+  wrapper.appendChild(marker);
+
+  // Capture ribbon crop (±30px around the crossing)
+  let cropDataUrl = '';
+  try {
+    const cropCanvas = document.createElement('canvas');
+    const cropStart = Math.max(0, ribbonOffset - 30);
+    const cropWidth = 60;
+    cropCanvas.width = cropWidth;
+    cropCanvas.height = RIBBON_HEIGHT;
+    cropCanvas.getContext('2d').drawImage(
+      ribbonCanvas, cropStart, 0, cropWidth, RIBBON_HEIGHT, 0, 0, cropWidth, RIBBON_HEIGHT
+    );
+    cropDataUrl = cropCanvas.toDataURL('image/jpeg', 0.85);
+  } catch {}
+
+  // POST to hub
+  const ts = Date.now() / 1000;
+  try {
+    const fd = new FormData();
+    fd.append('timestamp', ts);
+    if (cropDataUrl) fd.append('ribbon_crop', cropDataUrl);
+
+    const res = await api('POST', '/timing/crossing', fd);
+    notify('Crossing #' + crossingCount, timeStr, 'var(--green)');
+  } catch (err) {
+    notify('Crossing Error', err.message);
+  }
+}
+
+// ── Scrubber: tap/drag on ribbon to read time ──
+const ribbonScroll = document.getElementById('ribbon-scroll');
+const scrubber = document.getElementById('scrubber');
+const scrubberTime = document.getElementById('scrubber-time');
+
+ribbonScroll.addEventListener('click', (e) => {
+  if (!raceStart) return;
+  const rect = ribbonScroll.getBoundingClientRect();
+  const x = e.clientX - rect.left + ribbonScroll.scrollLeft;
+
+  scrubber.style.display = 'block';
+  scrubber.style.left = x + 'px';
+
+  // Calculate time from pixel position
+  const elapsedSec = x / PIXELS_PER_SEC;
+  scrubberTime.textContent = fmtElapsed(elapsedSec);
+});
+
+// ── Controls ──
+function toggleArm() {
+  armed = !armed;
+  const btn = document.getElementById('arm-btn');
+  if (armed) {
+    btn.className = 'arm-btn armed';
+    btn.textContent = '🔴 ARMED — SCANNING';
+    prevColumnData = null;
+    if (navigator.vibrate) navigator.vibrate(100);
+  } else {
+    btn.className = 'arm-btn disarmed';
+    btn.textContent = '⏸ DISARMED';
+  }
+}
+
+document.getElementById('sensitivity').addEventListener('input', (e) => {
+  sensitivity = parseInt(e.target.value);
+  document.getElementById('sens-val').textContent = sensitivity;
+});
+
+function saveRibbon() {
+  try {
+    const url = ribbonCanvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ribbon_${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+    a.click();
+    notify('Saved', 'Ribbon image downloaded');
+  } catch (err) {
+    notify('Save Error', err.message);
+  }
+}
+
+// ── Clock ──
+function tickClock() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  document.getElementById('clock').textContent = fmtElapsed(elapsed);
+}
+
+function setNetStatus(ok) {
+  document.getElementById('net-dot').className = ok ? 'dot dot-green' : 'dot dot-red';
+}
+
+// ── WebSocket ──
+connectWS((msg) => {
+  setNetStatus(true);
+
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    // Auto-arm when race starts
+    if (!armed) toggleArm();
+    lastMarkerSec = -1;
+    ribbonOffset = 0;
+  }
+
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('clock').textContent = '0:00.000';
+    crossingCount = 0;
+    document.getElementById('crossing-count').textContent = '0';
+    ribbonOffset = 0;
+    lastMarkerSec = -1;
+    prevColumnData = null;
+    ribbonCanvas.width = 1;
+    ribbonCanvas.height = RIBBON_HEIGHT;
+    // Clear markers
+    const wrapper = document.getElementById('ribbon-wrapper');
+    wrapper.querySelectorAll('.time-marker, .crossing-marker').forEach(el => el.remove());
+    wrapper.style.width = '100%';
+    scrubber.style.display = 'none';
+    if (armed) toggleArm();
+  }
+});
+
+// ── Init ──
+(async () => {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    }
+    setNetStatus(true);
+  } catch { setNetStatus(false); }
+
+  await startCamera();
+  scanning = true;
+  scanLoop();
+})();
+</script>
+</body>
+</html>

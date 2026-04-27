@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LIVESTREAM · Big Red</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    html, body { height: 100%; overflow: hidden; margin: 0; }
+    body { display: flex; flex-direction: column; background: #000; }
+
+    .ls-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Video feed (from front camera via WebRTC or img stream) */
+    #live-feed {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      background: #0a0a0a;
+    }
+
+    .no-feed-msg {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .no-feed-msg h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .no-feed-msg p { font-size: 0.85rem; }
+
+    /* ── Top bar: race info ── */
+    .ls-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+      z-index: 10;
+    }
+
+    .ls-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ls-brand-text {
+      font-size: 0.85rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      background: var(--grad-red);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .ls-live-badge {
+      padding: 4px 10px;
+      background: var(--red);
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    .ls-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    /* ── Incoming runners overlay (top right) ── */
+    .ls-incoming {
+      position: absolute;
+      top: 60px;
+      right: 16px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 280px;
+    }
+
+    .incoming-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(230,57,70,0.3);
+      border-left: 4px solid var(--red);
+      border-radius: 8px;
+      animation: slideInRight 0.4s ease both;
+    }
+
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0); opacity: 1; }
+    }
+
+    .incoming-bib {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.2rem;
+      font-weight: 900;
+      color: var(--red);
+    }
+
+    .incoming-name { font-weight: 600; font-size: 0.85rem; }
+    .incoming-cat  { font-size: 0.65rem; color: var(--muted); }
+
+    /* ── Bottom results ticker ── */
+    .ls-bottom {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      z-index: 10;
+      background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, transparent 100%);
+      padding: 60px 20px 16px;
+    }
+
+    .ls-ticker-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 0;
+      animation: fadeUp 0.3s ease both;
+    }
+
+    .ticker-rank {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 800;
+      min-width: 28px;
+      text-align: center;
+    }
+
+    .ticker-rank.gold   { color: #FFD700; }
+    .ticker-rank.silver { color: #C0C0C0; }
+    .ticker-rank.bronze { color: #CD7F32; }
+
+    .ticker-bib {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      color: var(--red);
+      font-size: 0.85rem;
+    }
+
+    .ticker-name { font-weight: 600; font-size: 0.85rem; }
+    .ticker-time {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--green);
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-left: auto;
+    }
+
+    /* ── Finish flash ── */
+    .finish-flash {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .finish-flash.show {
+      animation: flashPop 3s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @keyframes flashPop {
+      0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      10%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+      20%  { transform: translate(-50%, -50%) scale(1); }
+      80%  { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+    }
+
+    .flash-inner {
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(16px);
+      border: 2px solid var(--green);
+      border-radius: 16px;
+      padding: 24px 40px;
+    }
+
+    .flash-bib {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 3rem;
+      font-weight: 900;
+      color: var(--red);
+    }
+
+    .flash-name { font-size: 1.5rem; font-weight: 700; margin-top: 4px; }
+    .flash-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--green);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="ls-container">
+
+  <!-- Video feed placeholder -->
+  <video id="live-feed" autoplay playsinline muted></video>
+
+  <div class="no-feed-msg" id="no-feed">
+    <h2>📹 Waiting for Front Camera Feed</h2>
+    <p>The front-view iPhone will stream here via WebRTC.<br>
+    Make sure the phone is on <code>/phone/front</code> and connected to the same network.</p>
+    <p style="margin-top:16px;color:var(--text-secondary)">
+      Meanwhile, race data will appear as results come in.
+    </p>
+  </div>
+
+  <div class="ls-top">
+    <div class="ls-brand">
+      <div class="ls-live-badge"><span class="live-dot"></span> LIVE</div>
+      <div class="ls-brand-text">BIG RED RACE</div>
+    </div>
+    <div class="ls-clock" id="clock">0:00.000</div>
+  </div>
+
+  <!-- Incoming runners (pre-finish) -->
+  <div class="ls-incoming" id="incoming-list"></div>
+
+  <!-- Finish confirmation flash -->
+  <div class="finish-flash" id="finish-flash">
+    <div class="flash-inner">
+      <div class="flash-bib" id="flash-bib"></div>
+      <div class="flash-name" id="flash-name"></div>
+      <div class="flash-time" id="flash-time"></div>
+    </div>
+  </div>
+
+  <!-- Bottom results ticker -->
+  <div class="ls-bottom">
+    <div id="ticker-list"></div>
+  </div>
+
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+let raceStart = null;
+let clockInterval = null;
+const incomingRunners = new Map(); // bib → {name, category, timeout}
+
+function tickClock() {
+  if (!raceStart) return;
+  const elapsed = (Date.now() / 1000) - raceStart;
+  document.getElementById('clock').textContent = fmtElapsed(elapsed);
+}
+
+// ── Load recent results for ticker ──
+async function loadResults() {
+  try {
+    const results = await api('GET', '/results/all');
+    const ticker = document.getElementById('ticker-list');
+    // Show last 5
+    ticker.innerHTML = results.slice(0, 5).map((r, i) => {
+      const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      return `
+        <div class="ls-ticker-row">
+          <span class="ticker-rank ${rankClass}">${i + 1}</span>
+          <span class="ticker-bib">#${r.bib_number}</span>
+          <span class="ticker-name">${r.name || '—'}</span>
+          <span class="ticker-time">${r.finish_time || '—'}</span>
+        </div>`;
+    }).join('');
+  } catch {}
+}
+
+// ── Incoming runner overlay ──
+function showIncoming(bib, name, category) {
+  // Avoid duplicates
+  if (incomingRunners.has(bib)) return;
+
+  const list = document.getElementById('incoming-list');
+  const card = document.createElement('div');
+  card.className = 'incoming-card';
+  card.id = `incoming-${bib}`;
+  card.innerHTML = `
+    <div class="incoming-bib">#${bib}</div>
+    <div>
+      <div class="incoming-name">${name}</div>
+      <div class="incoming-cat">${category}</div>
+    </div>`;
+  list.appendChild(card);
+
+  // Remove after 15 seconds
+  const timeout = setTimeout(() => removeIncoming(bib), 15000);
+  incomingRunners.set(bib, { name, category, timeout });
+}
+
+function removeIncoming(bib) {
+  const el = document.getElementById(`incoming-${bib}`);
+  if (el) el.remove();
+  const data = incomingRunners.get(bib);
+  if (data) clearTimeout(data.timeout);
+  incomingRunners.delete(bib);
+}
+
+// ── Finish flash ──
+function showFinishFlash(bib, name, time) {
+  removeIncoming(bib);
+  const flash = document.getElementById('finish-flash');
+  document.getElementById('flash-bib').textContent = '#' + bib;
+  document.getElementById('flash-name').textContent = name;
+  document.getElementById('flash-time').textContent = time;
+
+  flash.classList.remove('show');
+  void flash.offsetWidth;
+  flash.classList.add('show');
+
+  ChimeEngine.playFinishChime();
+  // Refresh ticker
+  setTimeout(loadResults, 500);
+}
+
+// ── WebSocket ──
+connectWS((msg) => {
+  if (msg.type === 'race_started') {
+    raceStart = msg.timestamp;
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+  }
+
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('clock').textContent = '0:00.000';
+    document.getElementById('ticker-list').innerHTML = '';
+    document.getElementById('incoming-list').innerHTML = '';
+    incomingRunners.clear();
+  }
+
+  if (msg.type === 'approaching_runner') {
+    showIncoming(msg.bib_number, msg.name, msg.category);
+  }
+
+  if (msg.type === 'finish_detected') {
+    const time = msg.formatted || msg.elapsed || '—';
+    showFinishFlash(msg.bib_number || msg.bib, msg.runner_name || '—', time);
+  }
+});
+
+// ── Init ──
+(async () => {
+  try {
+    const s = await api('GET', '/race/status');
+    if (s.started) {
+      raceStart = s.race_start;
+      if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    }
+  } catch {}
+  loadResults();
+  // Refresh results every 10s
+  setInterval(loadResults, 10000);
+})();
+</script>
+</body>
+</html>

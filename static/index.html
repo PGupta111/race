@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Big Red Command Center</title>
+  <title>Big Red Command Center — ULTRA-ELITE</title>
+  <meta name="description" content="Olympic-grade race timing command center with AI-powered bib detection and real-time results.">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -12,24 +13,27 @@
   <div class="live-dot"></div>
   <div>
     <div class="header-brand">🏁 BIG RED COMMAND CENTER</div>
-    <div class="header-sub">v2026.ULTRA-LIGHT &nbsp;·&nbsp; Bluetooth 5.4 + 5G</div>
+    <div class="header-sub">v2026.ULTRA-ELITE · Bluetooth 5.4 + 5G</div>
   </div>
   <nav class="nav">
-    <a href="/"        class="active">Dashboard</a>
+    <a href="/" class="active">Dashboard</a>
     <a href="/checkin">Check-In</a>
     <a href="/var">VAR</a>
     <a href="/results">Results</a>
+    <a href="/announcer">Announcer</a>
+    <a href="/livestream">📺 Live</a>
+    <a href="/phone/calibrate">📱 Phones</a>
   </nav>
 </header>
 
 <div class="container">
 
-  <!-- Sensor status -->
-  <div class="card mt-16">
+  <!-- Sensor Fusion Status -->
+  <div class="card mt-16" style="animation-delay: 0.05s">
     <div class="card-title">Sensor Fusion Status</div>
     <div class="sensor-row">
-      <div class="sensor-chip"><div class="dot dot-green"></div>YOLO26 Bib Detector</div>
-      <div class="sensor-chip"><div class="dot dot-green"></div>IR Depth / LiDAR</div>
+      <div class="sensor-chip" id="sensor-yolo"><div class="dot dot-green"></div>YOLO26 Bib Detector</div>
+      <div class="sensor-chip" id="sensor-ir"><div class="dot dot-green"></div>IR Depth / LiDAR</div>
       <div class="sensor-chip"><div class="dot dot-green"></div>Side-View Line Scanner</div>
       <div class="sensor-chip"><div class="dot dot-green"></div>Bluetooth 5.4 Sync</div>
       <div class="sensor-chip"><div class="dot dot-green"></div>5G Data Link</div>
@@ -37,9 +41,9 @@
     </div>
   </div>
 
-  <!-- Stats + Clock -->
+  <!-- Stats + Clock Grid -->
   <div class="grid-2 mt-16">
-    <div class="card">
+    <div class="card" style="animation-delay: 0.1s">
       <div class="card-title">Race Statistics</div>
       <div class="grid-4">
         <div>
@@ -60,38 +64,46 @@
         </div>
       </div>
       <div class="mt-16 flex gap-8">
-        <div class="card" style="flex:1;padding:12px">
+        <div class="card" style="flex:1;padding:14px;margin-top:0">
           <div class="card-title">T-Shirt Revenue</div>
-          <div class="metric green" id="stat-revenue">$0</div>
+          <div class="metric green" id="stat-revenue" style="font-size:2rem">$0</div>
         </div>
-        <div class="card" style="flex:1;padding:12px">
+        <div class="card" style="flex:1;padding:14px;margin-top:0">
           <div class="card-title">T-Shirt Orders</div>
-          <div class="metric orange" id="stat-tshirts">0</div>
+          <div class="metric orange" id="stat-tshirts" style="font-size:2rem">0</div>
         </div>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="animation-delay: 0.15s">
       <div class="card-title">Race Clock</div>
       <div class="race-clock" id="race-clock">0:00.000</div>
       <div class="mt-16 flex gap-8" style="flex-wrap:wrap">
         <button class="btn btn-green btn-lg" id="btn-start">▶ Start Race</button>
         <button class="btn btn-orange btn-lg" id="btn-sim">⚡ Simulate Finish</button>
+        <button class="btn btn-gray" id="btn-reset" title="Reset race data">↺ Reset</button>
       </div>
       <div class="mt-8" id="race-status-msg" style="font-size:.8rem;color:var(--muted)">
         Race not started. Click Start Race to begin.
       </div>
+      <!-- Chime toggle -->
+      <div class="mt-8 flex items-center gap-8">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.8rem;color:var(--text-secondary)">
+          <input type="checkbox" id="chime-toggle" checked style="accent-color:var(--green);width:16px;height:16px">
+          🔔 Confirmation Chime
+        </label>
+      </div>
     </div>
   </div>
 
-  <!-- Live event feed + recent finishes -->
+  <!-- Live Feed + Recent Finishes -->
   <div class="grid-2 mt-16">
-    <div class="card">
+    <div class="card" style="animation-delay: 0.2s">
       <div class="card-title">Live Event Feed</div>
       <div class="live-feed" id="feed"></div>
     </div>
 
-    <div class="card">
+    <div class="card" style="animation-delay: 0.25s">
       <div class="card-title">Recent Finishes</div>
       <div class="table-wrap">
         <table>
@@ -106,10 +118,10 @@
     </div>
   </div>
 
-  <!-- Registered runners -->
-  <div class="card mt-16">
-    <div class="flex items-center justify-between mb-0" style="margin-bottom:14px">
-      <div class="section-title mb-0">Registered Runners</div>
+  <!-- Registered Runners -->
+  <div class="card mt-16" style="animation-delay: 0.3s">
+    <div class="flex items-center justify-between" style="margin-bottom:14px">
+      <div class="section-title mb-0" style="margin-bottom:0">Registered Runners</div>
       <button class="btn btn-gray" id="btn-add-runner">+ Add Runner</button>
     </div>
     <div class="table-wrap">
@@ -124,7 +136,7 @@
 
 </div>
 
-<!-- Add runner modal -->
+<!-- Add Runner Modal -->
 <div class="modal-overlay hidden" id="add-modal">
   <div class="modal-box">
     <div class="modal-title">Add New Runner</div>
@@ -161,6 +173,11 @@ const feed = document.getElementById('feed');
 let raceStart = null;
 let clockInterval = null;
 
+// ── Chime toggle ──
+document.getElementById('chime-toggle').addEventListener('change', (e) => {
+  if (e.target.checked) ChimeEngine.enable(); else ChimeEngine.disable();
+});
+
 // ── Clock ──
 function tickClock() {
   if (!raceStart) return;
@@ -170,29 +187,37 @@ function tickClock() {
 
 async function loadStats() {
   const s = await api('GET', '/stats');
-  document.getElementById('stat-total').textContent    = s.total_runners;
-  document.getElementById('stat-checked').textContent  = s.checked_in;
-  document.getElementById('stat-finished').textContent = s.finished;
-  document.getElementById('stat-pending').textContent  = s.pending_var;
-  document.getElementById('stat-revenue').textContent  = `$${s.tshirt_revenue.toFixed(0)}`;
-  document.getElementById('stat-tshirts').textContent  = s.tshirt_orders;
+  animateNumber(document.getElementById('stat-total'), s.total_runners);
+  animateNumber(document.getElementById('stat-checked'), s.checked_in);
+  animateNumber(document.getElementById('stat-finished'), s.finished);
+  animateNumber(document.getElementById('stat-pending'), s.pending_var);
+  document.getElementById('stat-revenue').textContent = `$${s.tshirt_revenue.toFixed(0)}`;
+  document.getElementById('stat-tshirts').textContent = s.tshirt_orders;
+
   if (s.race_started && !raceStart) {
     const status = await api('GET', '/race/status');
     raceStart = status.race_start;
-    if (!clockInterval) clockInterval = setInterval(tickClock, 100);
-    document.getElementById('race-status-msg').textContent =
-      'Race in progress — clock running.';
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
+    document.getElementById('race-status-msg').textContent = 'Race in progress — clock running.';
     document.getElementById('btn-start').disabled = true;
   }
-  // VAR sensor
+
+  // VAR sensor chip
   const vs = document.getElementById('var-sensor');
+  const dot = vs.querySelector('.dot');
   if (s.pending_var > 0) {
-    vs.querySelector('.dot').className = 'dot dot-orange';
-    vs.querySelector('.dot').nextSibling.textContent = `VAR Dashboard (${s.pending_var} pending)`;
+    dot.className = 'dot dot-orange';
+    vs.childNodes[1].textContent = ` VAR Dashboard (${s.pending_var} pending)`;
   } else {
-    vs.querySelector('.dot').className = 'dot dot-green';
-    vs.querySelector('.dot').nextSibling.textContent = 'VAR Dashboard';
+    dot.className = 'dot dot-green';
+    vs.childNodes[1].textContent = ' VAR Dashboard';
   }
+
+  // Sensor status
+  const yoloDot = document.getElementById('sensor-yolo').querySelector('.dot');
+  yoloDot.className = s.yolo_active ? 'dot dot-green' : 'dot dot-orange';
+  const irDot = document.getElementById('sensor-ir').querySelector('.dot');
+  irDot.className = s.sensor_real ? 'dot dot-green' : 'dot dot-orange';
 }
 
 async function loadRunners() {
@@ -224,7 +249,7 @@ async function loadRecent() {
       <td>#${r.rank}</td>
       <td class="bold mono">${r.bib_number}</td>
       <td>${r.name}</td>
-      <td class="mono green" style="color:var(--green)">${r.finish_time}</td>
+      <td class="mono finish-time">${r.finish_time}</td>
       <td>${statusBadge(r.status)}</td>
     </tr>`).join('');
 }
@@ -233,34 +258,46 @@ async function loadRecent() {
 connectWS((msg) => {
   if (msg.type === 'race_started') {
     raceStart = msg.timestamp;
-    if (!clockInterval) clockInterval = setInterval(tickClock, 100);
+    if (!clockInterval) clockInterval = setInterval(tickClock, 50);
     document.getElementById('race-status-msg').textContent = 'Race in progress — clock running.';
     document.getElementById('btn-start').disabled = true;
     feedLine(feed, 'RACE STARTED — clock running', 'ok');
+    ChimeEngine.playPing();
     loadStats();
+  }
+  if (msg.type === 'race_reset') {
+    raceStart = null;
+    if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    document.getElementById('race-clock').textContent = '0:00.000';
+    document.getElementById('race-status-msg').textContent = 'Race reset. Ready for new start.';
+    document.getElementById('btn-start').disabled = false;
+    feedLine(feed, 'RACE RESET — all data cleared', 'warn');
+    loadStats(); loadRunners(); loadRecent();
   }
   if (msg.type === 'checkin') {
     feedLine(feed, `CHECK-IN  Bib ${msg.runner.bib_number}  ${msg.runner.name}`, 'info');
+    ChimeEngine.playPing();
     loadRunners(); loadStats();
   }
   if (msg.type === 'finish_detected') {
     const e = msg.event;
-    feedLine(feed, `FINISH  Bib ${e.bib_number}  depth ${fmtDepth(e.depth_mm)}  ${e.depth_ok ? 'OK' : 'DEPTH FAIL'}`, e.depth_ok ? 'ok' : 'warn');
+    const name = e.runner_name || '';
+    feedLine(feed, `FINISH  Bib ${e.bib_number} ${name}  depth ${fmtDepth(e.depth_mm)}  ${e.depth_ok ? 'OK' : 'DEPTH FAIL'}`, e.depth_ok ? 'ok' : 'warn');
+    ChimeEngine.playFinishChime();
     loadStats();
   }
   if (msg.type === 'var_accepted' || msg.type === 'var_overridden' || msg.type === 'var_rejected') {
     const e = msg.event;
     const label = msg.type === 'var_accepted' ? 'ACCEPTED' : msg.type === 'var_overridden' ? 'OVERRIDE' : 'REJECTED';
     feedLine(feed, `VAR ${label}  Bib ${e.bib_number}`, msg.type === 'var_rejected' ? 'error' : 'ok');
+    if (msg.type !== 'var_rejected') ChimeEngine.playPing();
     loadStats(); loadRecent();
   }
 });
 
 // ── Buttons ──
 document.getElementById('btn-start').addEventListener('click', async () => {
-  try {
-    await api('POST', '/race/start');
-  } catch (err) { notify('Error', err.message); }
+  try { await api('POST', '/race/start'); } catch (err) { notify('Error', err.message); }
 });
 
 document.getElementById('btn-sim').addEventListener('click', async () => {
@@ -271,7 +308,12 @@ document.getElementById('btn-sim').addEventListener('click', async () => {
   } catch (err) { notify('Error', err.message); }
 });
 
-// ── Add runner modal ──
+document.getElementById('btn-reset').addEventListener('click', async () => {
+  if (!confirm('Reset race data? This cannot be undone.')) return;
+  try { await api('POST', '/race/reset'); } catch (err) { notify('Error', err.message); }
+});
+
+// ── Add Runner Modal ──
 document.getElementById('btn-add-runner').addEventListener('click', () => {
   document.getElementById('add-modal').classList.remove('hidden');
 });
@@ -299,7 +341,7 @@ loadRecent();
 setInterval(loadStats, 5000);
 setInterval(loadRecent, 5000);
 feedLine(feed, 'Command Center online — all systems nominal', 'ok');
-feedLine(feed, 'YOLO26 · IR Depth · Line-Scan · Bluetooth 5.4 · 5G ready', 'info');
+feedLine(feed, 'v2026.ULTRA-ELITE · YOLO26 · IR Depth · Line-Scan · BT 5.4 · 5G', 'info');
 </script>
 </body>
 </html>
