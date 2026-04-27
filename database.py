@@ -1,9 +1,16 @@
 import sqlite3
 import uuid
+import os
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
-DB_PATH = "race.db"
+if os.getenv("VERCEL"):
+    DB_PATH = "/tmp/race.db"
+    if not os.path.exists(DB_PATH) and os.path.exists("race.db"):
+        shutil.copy2("race.db", DB_PATH)
+else:
+    DB_PATH = "race.db"
 
 
 def get_db() -> sqlite3.Connection:

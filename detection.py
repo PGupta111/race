@@ -153,8 +153,11 @@ def match_bib_visual(query_image_bytes: bytes, bib_photos: List[Dict]) -> dict:
         if not bib_path:
             continue
 
-        # Resolve path: /uploads/xxx.jpg → uploads/xxx.jpg
+        # Resolve path: /uploads/xxx.jpg
         local_path = bib_path.lstrip("/")
+        if os.getenv("VERCEL"):
+            local_path = local_path.replace("uploads/", "/tmp/uploads/")
+            
         if not Path(local_path).exists():
             continue
 
